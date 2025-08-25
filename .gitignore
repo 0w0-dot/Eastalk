@@ -36,3 +36,7 @@ build/
 
 # Login credentials
 login.txt
+
+# Claude Code configuration
+CLAUDE.md
+CLAUDE.md.md
