@@ -182,7 +182,7 @@ Node.js & Git
 - 파일 삭제시 git rm 및 commit 사용할 것
 - 파일 작업 완료후 pull request 실행할 것
 - 테스트 브랜치(test)에서 충분히 검증 후 PR 머지하여 master 에 병합
-- github 저장소 URL은 다음과 같아: https://github.com/0w0-dot/kkyung
+- github 저장소 URL은 다음과 같아: https://github.com/0w0-dot/Eastalk.git
   지시하면, 로컬의 main 브랜치를 github에 올려야 해.
   로컬의 main 브랜치와 github의 main 브랜치는 서로 동기화되어야 해.
   github 저장소 최초 연결 후, 동기화 작업 진행해 주고, gitignore 작업도 해줘.

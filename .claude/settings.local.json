@@ -3,7 +3,9 @@
     "allow": [
       "Bash(claude mcp add-json:*)",
       "Bash(claude mcp add git -s user --command python:*)",
-      "Bash(claude --debug)"
+      "Bash(claude --debug)",
+      "Bash(git remote set-url:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
