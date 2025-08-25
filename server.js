@@ -1049,8 +1049,30 @@ app.use('*', (req, res) => {
 
 // ===== Keep-Alive 시스템 (Render Sleep 방지) =====
 function initKeepAliveSystem() {
-  // 환경 변수에서 URL 가져오기 (기본값: Render 기본 도메인)
-  const KEEP_ALIVE_URL = process.env.KEEP_ALIVE_URL || `https://${process.env.RENDER_SERVICE_NAME || 'eastalk-web'}.onrender.com`;
+  // 환경별 서버 URL 자동 감지
+  const getServerURL = () => {
+    // 환경 변수로 직접 지정된 경우 우선 사용
+    if (process.env.KEEP_ALIVE_URL) {
+      return process.env.KEEP_ALIVE_URL;
+    }
+    
+    // Render 환경 변수에서 현재 서비스 URL 가져오기
+    if (process.env.RENDER_EXTERNAL_URL) {
+      return process.env.RENDER_EXTERNAL_URL;
+    }
+    
+    // NODE_ENV에 따른 기본 URL 설정
+    if (process.env.NODE_ENV === 'staging') {
+      return 'https://eastalk-staging.onrender.com';
+    } else if (process.env.NODE_ENV === 'production') {
+      return 'https://eastalk.onrender.com'; // 메인 서버 주소 수정
+    }
+    
+    // 개발 환경 (로컬)
+    return `http://localhost:${PORT}`;
+  };
+
+  const KEEP_ALIVE_URL = getServerURL();
   
   console.log('😴 Keep-Alive 시스템 활성화');
   console.log(`🎯 Target URL: ${KEEP_ALIVE_URL}/health`);
