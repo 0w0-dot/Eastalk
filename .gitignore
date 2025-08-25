@@ -10,6 +10,7 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+.env.example
 
 # Logs
 logs/
@@ -36,6 +37,7 @@ build/
 
 # Login credentials
 login.txt
+DEPLOY.md
 
 # Claude Code configuration
 CLAUDE.md
