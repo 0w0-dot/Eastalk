@@ -387,6 +387,9 @@
       }
     };
     
+    // 레거시 지원을 위한 el 함수 복원
+    const el = (selector) => document.querySelector(selector);
+    
     // 캐시 도우미
     const messagesEl = DOM.el('#messages');
     
@@ -490,13 +493,13 @@
     /* ===== UI Base ===== */
     function enableUI(enable){
       ['nickname','status','avatar','clearAvatar','saveBtn','text','sendBtn','photoBtn'].forEach(id=>{
-        const n = el('#'+id); if (n) n.disabled = !enable;
+        const n = DOM.el('#'+id); if (n) n.disabled = !enable;
       });
-      el('.wrap').setAttribute('aria-disabled', enable ? 'false' : 'true');
+      DOM.el('.wrap').setAttribute('aria-disabled', enable ? 'false' : 'true');
       // 헤더 로그아웃 버튼 토글
-      el('#logoutBtn').style.display = enable ? 'inline-flex' : 'none';
+      DOM.el('#logoutBtn').style.display = enable ? 'inline-flex' : 'none';
     }
-    function setAvatar(url){ const img=el('#avatarImg'); if(url&&url.trim()){ img.src=url; img.style.visibility='visible'; } else { img.removeAttribute('src'); img.style.visibility='hidden'; } }
+    function setAvatar(url){ const img=DOM.el('#avatarImg'); if(url&&url.trim()){ img.src=url; img.style.visibility='visible'; } else { img.removeAttribute('src'); img.style.visibility='hidden'; } }
 
     function labelFor(roomName){
       if (isCompact() && roomName.indexOf('방문예정')===0) return '방문예정';
@@ -550,8 +553,35 @@
       }
     };
 
+    const UI = {
+      drawTabs: () => {
+        const tabs = DOM.el('#tabs'); tabs.innerHTML='';
+        CONFIG.ROOMS.forEach(r=>{
+          const b = DOM.create('div', 'tab');
+          b.textContent = UI.labelFor(r);
+          b.title = r; b.setAttribute('aria-label', r);
+          b.onclick = () => RoomManager.switchRoom(r);
+          tabs.appendChild(b);
+        });
+        UI.setActiveTabUI();
+      },
+      
+      labelFor: (roomName) => {
+        if (UI.isCompact() && roomName.indexOf('방문예정')===0) return '방문예정';
+        return roomName;
+      },
+      
+      setActiveTabUI: () => {
+        document.querySelectorAll('.tab').forEach(t=>{
+          t.classList.toggle('active', t.textContent.replace(/\s/g,'') === UI.labelFor(AppState.currentRoom).replace(/\s/g,''));
+        });
+      },
+      
+      isCompact: () => window.innerWidth <= 480
+    };
+    
     function drawTabs(){
-      const tabs = el('#tabs'); tabs.innerHTML='';
+      UI.drawTabs();
       ROOMS.forEach(r=>{
         const b=document.createElement('div'); b.className='tab';
         b.textContent = labelFor(r);
@@ -645,9 +675,9 @@
 
     /* ===== Profile Modal ===== */
     function showProfileModal(nickname, avatar, status){
-      el('#pname').textContent = nickname || 'User';
-      el('#pstatus').textContent = status ? status : '상태메시지 없음';
-      const img = el('#pimg');
+      DOM.el('#pname').textContent = nickname || 'User';
+      DOM.el('#pstatus').textContent = status ? status : '상태메시지 없음';
+      const img = DOM.el('#pimg');
       if (avatar && avatar.trim()){
         img.style.display='block';
         img.onerror = ()=>{ img.style.display='none'; img.removeAttribute('src'); };
@@ -656,16 +686,16 @@
         img.removeAttribute('src');
         img.style.display='none';
       }
-      el('#pmodal').classList.add('show');
-      el('#pmodal').setAttribute('aria-hidden','false');
+      DOM.el('#pmodal').classList.add('show');
+      DOM.el('#pmodal').setAttribute('aria-hidden','false');
     }
     function hideProfileModal(){
-      el('#pmodal').classList.remove('show');
-      el('#pmodal').setAttribute('aria-hidden','true');
+      DOM.el('#pmodal').classList.remove('show');
+      DOM.el('#pmodal').setAttribute('aria-hidden','true');
     }
     function bindProfileModalBasics(){
-      el('#pback').addEventListener('click', hideProfileModal);
-      el('#pclose').addEventListener('click', hideProfileModal);
+      DOM.el('#pback').addEventListener('click', hideProfileModal);
+      DOM.el('#pclose').addEventListener('click', hideProfileModal);
       window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') hideProfileModal(); });
     }
     async function openProfile(uid, fallbackNick, fallbackAvatar){
@@ -744,41 +774,49 @@
       if (stayAtBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
-    /* ===== Data ===== */
-    async function fetchAndRender(forceScroll){
-      if(!userId) return;
-
-      try {
-        const since = lastTs[currentRoom] || 0;
-        const messages = await apiCall('GET', `/api/messages/${currentRoom}?since=${since}`);
+    /* ===== 데이터 관리 ===== */
+    const DataManager = {
+      fetchAndRender: async (forceScroll) => {
+        if(!AppState.userId) return;
         
-        if(messages && messages.length){
-          messages.forEach(addOrUpdateMsg);
-          lastTs[currentRoom] = Math.max(lastTs[currentRoom]||0, messages[messages.length-1].ts||0);
-          if (forceScroll) messagesEl.scrollTop = messagesEl.scrollHeight;
+        try {
+          const since = AppState.cache.lastTs[AppState.currentRoom] || 0;
+          const messages = await apiCall('GET', `/api/messages/${AppState.currentRoom}?since=${since}`);
+          
+          if(messages && messages.length){
+            messages.forEach(addOrUpdateMsg);
+            AppState.cache.lastTs[AppState.currentRoom] = Math.max(AppState.cache.lastTs[AppState.currentRoom]||0, messages[messages.length-1].ts||0);
+            if (forceScroll) messagesEl.scrollTop = messagesEl.scrollHeight;
+          }
+          const t = new Date().toLocaleTimeString();
+          DOM.el('#topStatus').textContent = `연결됨 · ${t}`;
+        } catch (error) {
+          console.error(error);
+          DOM.el('#topStatus').textContent = '연결 끊김';
         }
-        const t = new Date().toLocaleTimeString();
-        el('#topStatus').textContent = `연결됨 · ${t}`;
-      } catch (error) {
-        console.error(error);
-        el('#topStatus').textContent = '연결 끊김';
       }
+    };
+    
+    // 레거시 지원
+    async function fetchAndRender(forceScroll){
+      return DataManager.fetchAndRender(forceScroll);
     }
+    
 
     async function initMe(){
       try {
-        const u = await apiCall('POST', `/api/user/${userId}`);
-        me = u;
-        el('#nickname').value = u.nickname || '';
-        el('#status').value = u.status || '';
-        el('#avatar').value = u.avatar || '';
-        el('#clearAvatar').checked = false;
-        el('#nicknameView').textContent = u.nickname || 'User';
-        el('#statusView').textContent = u.status || '상태메시지…';
-        el('#topStatus').textContent = (u.nickname || 'User') + (u.status ? ` — ${u.status}` : '');
+        const u = await apiCall('POST', `/api/user/${AppState.userId}`);
+        AppState.me = u;
+        DOM.el('#nickname').value = u.nickname || '';
+        DOM.el('#status').value = u.status || '';
+        DOM.el('#avatar').value = u.avatar || '';
+        DOM.el('#clearAvatar').checked = false;
+        DOM.el('#nicknameView').textContent = u.nickname || 'User';
+        DOM.el('#statusView').textContent = u.status || '상태메시지…';
+        DOM.el('#topStatus').textContent = (u.nickname || 'User') + (u.status ? ` — ${u.status}` : '');
         setAvatar(u.avatar || '');
-        drawTabs();
-        fetchAndRender(true);
+        UI.drawTabs();
+        DataManager.fetchAndRender(true);
       } catch (error) {
         console.error('사용자 정보 로드 실패:', error);
       }
