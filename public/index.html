@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>Eastalk (Web)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    /* ===== Design Tokens ===== */
+    :root{
+      --bg:#ffffff; --panel:#ffffff; --line:#e5e7eb;
+      --text:#111827; --muted:#6b7280;
+      --accent:#ffd400; --accent-ink:#111;
+      --bubble-me:#fff7cc; --bubble-other:#f3f4f6;
+
+      --radius-sm:10px; --radius-md:12px; --radius-lg:16px;
+      --shadow-1:0 1px 2px rgba(0,0,0,.06);
+      --shadow-2:0 6px 24px rgba(0,0,0,.08);
+      --focus: 0 0 0 3px rgba(0,0,0,.08), 0 0 0 6px rgba(255,212,0,.45);
+    }
+    *{ box-sizing:border-box; }
+    html,body{ height:100%; }
+    body{
+      margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Noto Sans KR,sans-serif;
+      background:var(--bg); color:var(--text);
+      -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+    }
+
+    /* ===== App Shell ===== */
+    header{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:12px 16px; border-bottom:1px solid var(--line);
+      background:#fafafa; position:sticky; top:0; z-index:5;
+    }
+    header .brand{ font-weight:700; letter-spacing:.2px; }
+    header .brand span{ color:var(--accent); }
+    #topStatus{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:40vw; }
+
+    .wrap{
+      display:flex; gap:12px; padding:12px; max-width:1024px; margin:0 auto;
+      height:calc(100vh - 56px); overflow:hidden; min-height:0;
+    }
+    @supports (height: 100dvh){
+      .wrap{ height:calc(100dvh - 56px); }
+    }
+    @supports not (height: 100dvh){
+      .wrap{ height:calc(var(--vh, 1vh) * 100 - 56px); }
+    }
+
+    .left,.right{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-lg); }
+    .left{ width:320px; padding:12px; overflow:auto; -webkit-overflow-scrolling:touch; touch-action:pan-y; }
+    .right{ flex:1; display:flex; flex-direction:column; min-height:0; }
+
+    /* ===== Profile ===== */
+    .profile{ display:flex; align-items:center; gap:12px; }
+    .avatar{ width:48px; height:48px; border-radius:50%; background:#e5e7eb; overflow:hidden; }
+    .avatar img{ width:100%; height:100%; object-fit:cover; display:block; }
+    .fields{ margin-top:12px; display:grid; gap:8px; }
+    .status{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--muted); font-size:12px; }
+
+    /* Inputs & Buttons */
+    .input{
+      width:100%; padding:12px 14px; border:1px solid var(--line); border-radius:var(--radius-sm);
+      font-size:14px; background:#fff; color:var(--text); transition:border-color .15s, box-shadow .15s;
+    }
+    .input::placeholder{ color:var(--muted); }
+    .input:focus{ outline:none; border-color:#d1d5db; box-shadow:var(--focus); }
+
+    .btn{
+      display:inline-flex; align-items:center; justify-content:center; gap:8px;
+      height:44px; padding:0 16px; border-radius:999px; border:1px solid transparent;
+      font-weight:700; cursor:pointer; user-select:none; transition:transform .02s, box-shadow .15s;
+    }
+    .btn:active{ transform:translateY(1px); }
+    .btn[disabled]{ opacity:.6; cursor:not-allowed; }
+    .btn-primary{ background:var(--accent); color:var(--accent-ink); box-shadow:var(--shadow-1); }
+    .btn-ghost{ background:#fff; color:var(--text); border:1px solid var(--line); }
+    .btn-icon{ width:44px; padding:0; }
+
+    .spinner{ width:16px; height:16px; border-radius:50%; border:2px solid currentColor; border-top-color:transparent; animation:spin .8s linear infinite; }
+    @keyframes spin{ to{ transform:rotate(360deg); } }
+
+    /* Tabs (모바일: 가로 스크롤) */
+    .tabs{
+      display:flex; gap:8px; padding:10px; border-bottom:1px solid var(--line); background:#fafafa;
+      overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:thin;
+      white-space:nowrap; touch-action:pan-y;
+    }
+    .tab{
+      display:inline-flex; align-items:center; justify-content:center;
+      padding:8px 12px; border:1px solid var(--line); border-radius:999px; background:#fff; cursor:pointer;
+      max-width:50vw; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;
+    }
+    .tab.active{ background:var(--accent); color:var(--accent-ink); border-color:transparent; }
+
+    /* Messages */
+    .messages{
+      flex:1; overflow-y:auto; padding:12px; padding-bottom:96px;
+      display:flex; flex-direction:column; gap:8px; background:#fff;
+      -webkit-overflow-scrolling:touch; touch-action:pan-y; min-height:0;
+    }
+    .msg-row{ display:flex; align-items:flex-end; gap:8px; }
+    .msg-row.me{ justify-content:flex-end; }
+    /* avatar button (clickable) */
+    .avatar-sm{
+      width:28px; height:28px; border-radius:50%; background:#e5e7eb; overflow:hidden;
+      flex:0 0 28px; display:flex; align-items:center; justify-content:center; font-size:12px; color:#6b7280;
+      border:0; padding:0; cursor:pointer;
+    }
+    .avatar-sm img{ width:100%; height:100%; object-fit:cover; display:block; }
+    .bubble{ max-width:86%; padding:12px 14px; border:1px solid var(--line); border-radius:16px; line-height:1.42; background:var(--bubble-other); box-shadow:var(--shadow-1); }
+    .msg-row.me .bubble{ background:var(--bubble-me); }
+    .meta{ font-size:11px; color:var(--muted); margin-top:6px; }
+
+    /* Reactions */
+    .reacts{ margin-top:8px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+    .chip{ display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border:1px solid var(--line); border-radius:999px; font-size:12px; background:#fff; cursor:pointer; user-select:none; }
+    .chip.mine{ border-color:#f59e0b; background:#fff7e6; }
+    .add-react{ border:1px dashed var(--line); background:#fff; border-radius:999px; padding:2px 10px; font-size:12px; cursor:pointer; }
+    .picker{ display:flex; gap:6px; margin-left:2px; }
+    .picker.hidden{ display:none; }
+    .pick{ background:#fff; border:1px solid var(--line); border-radius:8px; padding:4px 6px; cursor:pointer; }
+
+    /* Composer (safe-area 고려) */
+    .composer{
+      display:flex; gap:8px; padding:10px; padding-bottom:calc(10px + env(safe-area-inset-bottom));
+      border-top:1px solid var(--line);
+      background:#fff; position:sticky; bottom:0; z-index:3; box-shadow:0 -6px 18px rgba(0,0,0,.04);
+    }
+    .composer .input{ height:48px; }
+
+    /* Login Overlay */
+    .auth{ position:fixed; inset:0; display:grid; place-items:center; background:rgba(0,0,0,.35); backdrop-filter:blur(2px); z-index:9999; }
+    .auth.hidden{ display:none; }
+    .dialog{ width:min(460px, calc(100vw - 32px)); border-radius:20px; background:#fff; border:1px solid var(--line); box-shadow:var(--shadow-2); }
+    .dialog header{ position:relative; border-bottom:1px solid var(--line); background:#fff; border-radius:20px 20px 0 0; cursor:grab; }
+    .dialog main{ padding:16px; display:grid; gap:12px; }
+    .field{ display:grid; gap:6px; }
+    .label{ font-size:12px; color:var(--muted); }
+    .helper{ font-size:12px; color:var(--muted); }
+    .row-actions{ padding:12px 16px 16px; display:flex; gap:8px; }
+    .dialog .btn-primary{ width:100%; height:48px; }
+    body.auth-open{ overflow:hidden; }
+    .shake{ animation:shake .28s ease-in-out; }
+    @keyframes shake{ 0%,100%{ transform:translateX(0);} 25%{ transform:translateX(-6px);} 75%{ transform:translateX(6px);} }
+
+    /* ===== Mobile layout tweaks ===== */
+    #profileBtn{ display:none; }
+    #scrim{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:15; }
+    @media (max-width: 880px){
+      .wrap{ flex-direction:column; gap:8px; }
+      .right{ order:2; }
+      .left{ display:none; }
+      #profileBtn{ display:inline-flex; height:32px; }
+      #topStatus{ display:none; }
+      body.profile-open #scrim{ display:block; }
+      body.profile-open .left{
+        display:block; position:fixed; z-index:20;
+        top:56px; bottom:calc(84px + env(safe-area-inset-bottom)); left:8px; right:8px;
+        border-radius:16px; overflow:auto; -webkit-overflow-scrolling:touch; touch-action:pan-y;
+      }
+      .btn{ height:40px; }
+      .btn-icon{ width:40px; }
+      .bubble{ max-width:92%; }
+      .messages{ padding-bottom:120px; }
+      .tabs .tab{ max-width:60vw; }
+    }
+    @media (max-width: 480px){
+      .composer .input{ height:44px; }
+      .tabs .tab{ max-width:70vw; }
+    }
+
+    /* ===== Day separator (카톡 스타일) ===== */
+    .day-sep{ display:flex; align-items:center; gap:12px; margin:12px 0; color:var(--muted); font-size:12px; }
+    .day-sep::before,.day-sep::after{ content:""; flex:1; height:1px; background:var(--line); }
+    .day-chip{ background:#fff; border:1px solid var(--line); border-radius:999px; padding:4px 10px; }
+    body.win98 .day-sep::before, body.win98 .day-sep::after{ background:#808080; }
+    body.win98 .day-chip{
+      background:#c0c0c0;
+      border:2px solid #c0c0c0; border-top-color:#fff; border-left-color:#fff;
+      border-right-color:#404040; border-bottom-color:#404040;
+    }
+
+    /* ===== Profile Modal ===== */
+    .pmodal{ position:fixed; inset:0; display:none; place-items:center; z-index:60; }
+    .pmodal.show{ display:grid; }
+    .pback{ position:absolute; inset:0; background:rgba(0,0,0,.45); }
+    .pcard{
+      position:relative; width:min(420px, calc(100vw - 32px));
+      background:#fff; border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow-2);
+      padding:16px; display:grid; gap:12px; z-index:1;
+    }
+    .pclose{ position:absolute; top:8px; right:8px; border:0; background:#fff; border:1px solid var(--line); border-radius:8px; padding:6px 8px; cursor:pointer; }
+    .pavatar{ width:100%; display:grid; place-items:center; }
+    .pavatar img{ width:180px; height:180px; border-radius:50%; object-fit:cover; background:#e5e7eb; }
+    .pname{ font-weight:700; font-size:16px; text-align:center; }
+    .pstatus{ font-size:14px; color:var(--muted); text-align:center; word-break:break-word; }
+    @media (max-width:480px){ .pavatar img{ width:140px; height:140px; } }
+
+    /* Retro98 변형 */
+    body.win98 .pcard{ background:#c0c0c0; border:2px solid #808080; }
+    body.win98 .pclose{
+      background:#c0c0c0; border:2px solid #c0c0c0; border-top-color:#fff; border-left-color:#fff; border-right-color:#404040; border-bottom-color:#404040;
+    }
+
+    /* ===== Retro 98 Theme ===== */
+    body.win98{
+      --panel:#c0c0c0; --line:#808080; --text:#000; --muted:#404040; --accent:#c0c0c0; --accent-ink:#000;
+    }
+    body.win98, body.win98 *{
+      border-radius:0 !important; box-shadow:none !important;
+      font-family: Tahoma, Verdana, "MS Sans Serif", Arial, sans-serif !important; font-size:12px;
+    }
+    .w98-out{ border:2px solid #c0c0c0; border-top-color:#fff; border-left-color:#fff; border-right-color:#404040; border-bottom-color:#404040; background:#c0c0c0; }
+    .w98-in{ border:2px solid #808080; border-top-color:#404040; border-left-color:#404040; border-right-color:#fff; border-bottom-color:#fff; background:#fff; }
+
+    body.win98 header{ background:linear-gradient(#000080,#1084d0); color:#fff; border-bottom:2px solid #000; }
+    body.win98 header .brand span{ color:#fff; }
+    body.win98 .left, body.win98 .right, body.win98 .tabs, body.win98 .composer, body.win98 .dialog{ background:#c0c0c0; }
+    body.win98 .messages{ background:#fff; border:2px solid #808080; border-top-color:#404040; border-left-color:#404040; border-right-color:#fff; border-bottom-color:#fff; }
+
+    body.win98 .input{ height:24px; padding:4px 6px; border:2px solid #808080; border-top-color:#404040; border-left-color:#404040; border-right-color:#fff; border-bottom-color:#fff; }
+    body.win98 .input:focus{ outline:1px dotted #000; box-shadow:none; }
+
+    body.win98 .btn{ height:26px; padding:0 10px; border:2px solid #c0c0c0; border-top-color:#fff; border-left-color:#fff; border-right-color:#404040; border-bottom-color:#404040; background:#c0c0c0; color:#000; font-weight:400; }
+    body.win98 .btn:active{ border-top-color:#404040; border-left-color:#404040; border-right-color:#fff; border-bottom-color:#fff; }
+    body.win98 .btn-primary{ background:#c0c0c0; }
+    body.win98 .btn-icon{ width:26px; }
+
+    body.win98 .tab{ border:2px solid #c0c0c0; border-top-color:#fff; border-left-color:#fff; border-right-color:#404040; border-bottom-color:#404040; background:#c0c0c0; }
+    body.win98 .tab.active{ border-top-color:#404040; border-left-color:#404040; border-right-color:#fff; border-bottom-color:#fff; color:#000; }
+
+    body.win98 .bubble{ background:#fff !important; color:#000; border:1px solid #000; padding:8px 10px; }
+    body.win98 .meta{ color:#404040; }
+
+    body.win98 .chip, body.win98 .add-react, body.win98 .pick{
+      background:#c0c0c0; color:#000;
+      border:2px solid #c0c0c0; border-top-color:#fff; border-left-color:#fff; border-right-color:#404040; border-bottom-color:#404040;
+    }
+    body.win98 .chip.mine{ background:#ffffe1; }
+
+    body.win98 .composer{ background:#c0c0c0; }
+    body.win98 .composer .input{ height:24px; }
+
+    body.win98 .dialog{ background:#c0c0c0; }
+    body.win98 .dialog header{ background:linear-gradient(#000080,#1084d0)!important; color:#fff!important; border-bottom:2px solid #000; }
+    body.win98 .dialog header::after{ content:" _  □  X "; position:absolute; right:10px; top:8px; color:#fff; font-family:"Courier New",monospace; font-weight:700; }
+
+    @media (max-width:880px){
+      body.win98{ font-size:11px; }
+      body.win98 .btn{ height:24px; }
+      body.win98 .btn-icon{ width:24px; }
+      body.win98 .input{ height:22px; }
+    }
+  </style>
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body class="auth-open">
+  <header>
+    <div class="brand">Eastalk <span>• Web</span></div>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <button id="profileBtn" class="btn btn-ghost">👤 프로필</button>
+      <button id="toggle98" class="btn btn-ghost">🖥️ Retro 98</button>
+      <button id="logoutBtn" class="btn btn-ghost" style="display:none">로그아웃</button>
+      <div class="status" id="topStatus">—</div>
+    </div>
+  </header>
+
+  <div id="scrim"></div>
+
+  <div class="wrap" aria-disabled="true">
+    <!-- LEFT (Profile Drawer on mobile) -->
+    <aside class="left">
+      <div class="profile">
+        <div class="avatar"><img id="avatarImg" alt="" /></div>
+        <div>
+          <div id="nicknameView" style="font-weight:700;">User</div>
+          <div id="statusView" class="status">상태메시지…</div>
+        </div>
+      </div>
+      <div class="fields">
+        <input id="nickname" class="input" placeholder="닉네임" disabled />
+        <input id="status" class="input" placeholder="상태메시지 (예: 일하는 중…)" disabled />
+        <input id="avatar" class="input" placeholder="아바타 이미지 URL (선택)" disabled />
+        <!-- 추가: 아바타 지우기 -->
+        <label class="status" style="display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" id="clearAvatar" disabled />
+          아바타 지우기
+        </label>
+        <button id="saveBtn" class="btn btn-primary" disabled>프로필 저장</button>
+        <div class="status">* 로그인 완료 후 사용 가능합니다.</div>
+      </div>
+    </aside>
+
+    <!-- RIGHT -->
+    <section class="right">
+      <div class="tabs" id="tabs"></div>
+      <div class="messages" id="messages"></div>
+
+      <div class="composer">
+        <input id="text" class="input" placeholder="메시지 입력 (Enter 전송, Shift+Enter 줄바꿈)" disabled />
+        <button id="photoBtn" class="btn btn-ghost btn-icon" title="사진">📷</button>
+        <button id="sendBtn" class="btn btn-primary">
+          <span class="label-txt">보내기</span>
+          <span class="spinner" style="display:none"></span>
+        </button>
+      </div>
+
+      <form id="uploadForm" style="display:none">
+        <input type="file" id="image" name="image" accept="image/*" />
+      </form>
+    </section>
+  </div>
+
+  <!-- LOGIN -->
+  <div class="auth" id="auth" role="dialog" aria-modal="true" aria-labelledby="dlg-title">
+    <div class="dialog" id="dialogCard">
+      <header id="dlgDragHandle">
+        <div style="padding:12px 16px; font-weight:700;" id="dlg-title">Eastalk 로그인</div>
+      </header>
+      <main>
+        <div class="helper">이름과 생일 4자리(MMDD)를 입력하면 기존 정보를 불러옵니다. 없으면 새 계정을 만들어요.</div>
+        <div class="field">
+          <label class="label" for="loginName">이름</label>
+          <input id="loginName" class="input" placeholder="예: 홍길동" autocomplete="off" autocapitalize="off" spellcheck="false" />
+        </div>
+        <div class="field">
+          <label class="label" for="loginBirth">생일 4자리</label>
+          <input id="loginBirth" class="input" placeholder="MMDD" maxlength="4" inputmode="numeric" autocomplete="off" />
+        </div>
+      </main>
+      <div class="row-actions">
+        <button id="startBtn" class="btn btn-primary">시작하기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROFILE MODAL -->
+  <div class="pmodal" id="pmodal" aria-hidden="true">
+    <div class="pback" id="pback"></div>
+    <div class="pcard" role="dialog" aria-modal="true" aria-labelledby="pname">
+      <button class="pclose" id="pclose" aria-label="닫기">✕</button>
+      <div class="pavatar"><img id="pimg" alt="프로필 사진" /></div>
+      <div class="pname" id="pname">User</div>
+      <div class="pstatus" id="pstatus">상태메시지…</div>
+    </div>
+  </div>
+
+  <script>
+    /* ===== State ===== */
+    const ROOMS = ['주중','주말','전체','방문예정'];
+    const EMOJIS = ['👍','😂','😮','😢','😡','❤️'];
+    let currentRoom = '주중';
+    let userId = null;
+    let sending=false, uploading=false;
+    const renderedMids = new Set();
+    let me=null;
+    const lastTs = { '주중':0, '주말':0, '전체':0, '방문예정':0 };
+    const lastDayRendered = { '주중':'', '주말':'', '전체':'', '방문예정':'' };
+
+    // Socket.io 연결
+    const socket = io();
+
+    /* ===== Helpers ===== */
+    const el = s => document.querySelector(s);
+    const messagesEl = el('#messages');
+    const mkMid = () => 'mid-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
+    const signatureOf = (reactions)=>{
+      const o = reactions || {}; const keys = Object.keys(o).sort((a,b)=>a.localeCompare(b));
+      const norm = {}; keys.forEach(k=>{ norm[k]=[...(o[k]||[])].sort(); });
+      return JSON.stringify(norm);
+    };
+    const setBtnLoading = (btn, on)=>{
+      const sp = btn.querySelector('.spinner'); const lb = btn.querySelector('.label-txt');
+      if (on){ if(sp) sp.style.display='inline-block'; if(lb) lb.style.display='none'; btn.disabled=true; }
+      else { if(sp) sp.style.display='none'; if(lb) lb.style.display=''; btn.disabled=false; }
+    };
+
+    /* Day/Time formatters (카톡 스타일) */
+    function ymdKey(ts){ const d=new Date(ts); return [d.getFullYear(), d.getMonth()+1, d.getDate()].join('-'); }
+    function formatDayLabel(ts){
+      const d=new Date(ts); const w=['일','월','화','수','목','금','토'][d.getDay()];
+      const mm=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
+      return `${d.getFullYear()}.${mm}.${dd} (${w})`;
+    }
+    function formatTimeLabel(ts){
+      return new Intl.DateTimeFormat('ko-KR',{hour:'numeric',minute:'2-digit',hour12:true}).format(new Date(ts));
+    }
+
+    /* ===== Win98 Toggle + Click Sound ===== */
+    const applyTheme98 = (on)=>{
+      document.body.classList.toggle('win98', !!on);
+      localStorage.setItem('theme98',''+(on?1:0));
+    };
+    const restoreTheme98 = ()=> applyTheme98(localStorage.getItem('theme98')==='1');
+    let audioCtx=null;
+    function beep(){
+      if (!document.body.classList.contains('win98')) return;
+      try{
+        audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
+        const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+        o.type='square'; o.frequency.value=800;
+        g.gain.setValueAtTime(0.06, audioCtx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+0.08);
+        o.connect(g).connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+0.09);
+      }catch(e){}
+    }
+    function attachBeepTo(selector){
+      document.addEventListener('click', (e)=>{
+        if (e.target.closest(selector)) beep();
+      });
+    }
+
+    /* ===== Responsive helpers ===== */
+    const isCompact = () => window.innerWidth <= 480;
+
+    /* ===== UI Base ===== */
+    function enableUI(enable){
+      ['nickname','status','avatar','clearAvatar','saveBtn','text','sendBtn','photoBtn'].forEach(id=>{
+        const n = el('#'+id); if (n) n.disabled = !enable;
+      });
+      el('.wrap').setAttribute('aria-disabled', enable ? 'false' : 'true');
+      // 헤더 로그아웃 버튼 토글
+      el('#logoutBtn').style.display = enable ? 'inline-flex' : 'none';
+    }
+    function setAvatar(url){ const img=el('#avatarImg'); if(url&&url.trim()){ img.src=url; img.style.visibility='visible'; } else { img.removeAttribute('src'); img.style.visibility='hidden'; } }
+
+    function labelFor(roomName){
+      if (isCompact() && roomName.indexOf('방문예정')===0) return '방문예정';
+      return roomName;
+    }
+    function setActiveTabUI() {
+      document.querySelectorAll('.tab').forEach(t=>{
+        t.classList.toggle('active', t.textContent.replace(/\s/g,'') === labelFor(currentRoom).replace(/\s/g,''));
+      });
+    }
+    function switchRoom(nextRoom) {
+      if (nextRoom === currentRoom) return;
+      
+      // 이전 방에서 나가기
+      socket.emit('leaveRoom', currentRoom);
+      
+      currentRoom = nextRoom;
+      messagesEl.innerHTML = '';   // 화면 초기화
+      renderedMids.clear();
+      lastTs[currentRoom] = lastTs[currentRoom] || 0;
+      lastDayRendered[currentRoom] = '';
+      drawTabs(); setActiveTabUI();
+      
+      // 새 방에 입장
+      socket.emit('joinRoom', currentRoom);
+      
+      fetchAndRender(true);
+      document.body.classList.remove('profile-open'); // 모바일 드로어 닫기
+    }
+
+    function drawTabs(){
+      const tabs = el('#tabs'); tabs.innerHTML='';
+      ROOMS.forEach(r=>{
+        const b=document.createElement('div'); b.className='tab';
+        b.textContent = labelFor(r);
+        b.title = r; b.setAttribute('aria-label', r);
+        b.onclick=()=> switchRoom(r);
+        tabs.appendChild(b);
+      });
+      setActiveTabUI();
+    }
+    function initialLetter(name){ const t=String(name||'').trim(); return t? t[0].toUpperCase() : 'U'; }
+
+    /* ===== API 호출 함수들 ===== */
+    async function apiCall(method, url, body = null) {
+      try {
+        const options = {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        };
+        
+        if (body && method !== 'GET') {
+          options.body = JSON.stringify(body);
+        }
+        
+        const response = await fetch(url, options);
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'API 요청 실패');
+        }
+        
+        return await response.json();
+      } catch (error) {
+        throw error;
+      }
+    }
+
+    /* ===== Reactions ===== */
+    function reactsToCounts(reactions){
+      const counts = [];
+      for (const k of Object.keys(reactions||{})){
+        const arr = reactions[k]||[];
+        if (arr.length) counts.push({emoji:k, count:arr.length, mine:(arr.indexOf(userId)>=0)});
+      }
+      counts.sort((a,b)=> b.count-a.count || EMOJIS.indexOf(a.emoji)-EMOJIS.indexOf(b.emoji));
+      return counts;
+    }
+    function renderReactsHtml(m){
+      const sig = signatureOf(m.reactions||{});
+      const chips = reactsToCounts(m.reactions||{}).map(c=>`<span class="chip ${c.mine?'mine':''}" data-mid="${m.mid}" data-emoji="${c.emoji}">${c.emoji} ${c.count}</span>`).join('');
+      const picker = EMOJIS.map(e=>`<button class="pick" data-mid="${m.mid}" data-emoji="${e}" title="반응 추가">${e}</button>`).join('');
+      return `<div class="reacts" id="reacts-${m.mid}" data-sig='${sig}'>
+        <div class="chips">${chips}</div>
+        <button class="add-react" data-mid="${m.mid}" title="반응 추가">＋</button>
+        <div class="picker hidden" id="picker-${m.mid}">${picker}</div>
+      </div>`;
+    }
+    function bindReactionHandlers(mid){
+      const root = document.getElementById('reacts-'+mid); if(!root) return;
+      root.querySelectorAll('.chip').forEach(ch=>{
+        ch.onclick = (e)=>{ e.stopPropagation(); reactToggle(mid, ch.getAttribute('data-emoji')); };
+      });
+      const addBtn = root.querySelector('.add-react');
+      if (addBtn){
+        addBtn.onclick = (e)=>{ e.stopPropagation(); const p=document.getElementById('picker-'+mid); if(p) p.classList.toggle('hidden'); };
+      }
+      root.querySelectorAll('.pick').forEach(b=>{
+        b.onclick = (e)=>{ e.stopPropagation(); reactToggle(mid, b.getAttribute('data-emoji')); const p=document.getElementById('picker-'+mid); if(p) p.classList.add('hidden'); };
+      });
+    }
+    function updateReactsView(m){
+      const node = document.getElementById('reacts-'+m.mid);
+      if (!node) return;
+      const pickerOpen = !(node.querySelector('.picker')?.classList.contains('hidden'));
+      const oldSig = node.dataset.sig || '';
+      const newSig = signatureOf(m.reactions||{});
+      if (pickerOpen || oldSig === newSig) return;
+      node.outerHTML = renderReactsHtml(m);
+      bindReactionHandlers(m.mid);
+    }
+    async function reactToggle(mid, emoji){
+      try {
+        const result = await apiCall('POST', '/api/reactions', { mid, userId, emoji });
+        updateReactsView(result);
+        beep();
+      } catch (error) {
+        alert('반응 실패: ' + error.message);
+      }
+    }
+
+    /* ===== Profile Modal ===== */
+    function showProfileModal(nickname, avatar, status){
+      el('#pname').textContent = nickname || 'User';
+      el('#pstatus').textContent = status ? status : '상태메시지 없음';
+      const img = el('#pimg');
+      if (avatar && avatar.trim()){
+        img.style.display='block';
+        img.onerror = ()=>{ img.style.display='none'; img.removeAttribute('src'); };
+        img.src = avatar;
+      } else {
+        img.removeAttribute('src');
+        img.style.display='none';
+      }
+      el('#pmodal').classList.add('show');
+      el('#pmodal').setAttribute('aria-hidden','false');
+    }
+    function hideProfileModal(){
+      el('#pmodal').classList.remove('show');
+      el('#pmodal').setAttribute('aria-hidden','true');
+    }
+    function bindProfileModalBasics(){
+      el('#pback').addEventListener('click', hideProfileModal);
+      el('#pclose').addEventListener('click', hideProfileModal);
+      window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') hideProfileModal(); });
+    }
+    async function openProfile(uid, fallbackNick, fallbackAvatar){
+      showProfileModal(fallbackNick, fallbackAvatar, '불러오는 중…');
+      try {
+        const profile = await apiCall('GET', `/api/profile/${uid}`);
+        showProfileModal(profile.nickname || fallbackNick, profile.avatar || fallbackAvatar, profile.status || '');
+      } catch (error) {
+        showProfileModal(fallbackNick, fallbackAvatar, '');
+      }
+    }
+
+    /* ===== Messages ===== */
+    function addOrUpdateMsg(m){
+      if (document.getElementById('reacts-'+(m.mid||''))){ updateReactsView(m); return; }
+      if (m.mid && renderedMids.has(m.mid)) return;
+      if (m.mid) renderedMids.add(m.mid);
+
+      const dayKey = ymdKey(m.ts);
+      if (lastDayRendered[currentRoom] !== dayKey){
+        lastDayRendered[currentRoom] = dayKey;
+        const sep = document.createElement('div');
+        sep.className = 'day-sep';
+        sep.innerHTML = `<span class="day-chip">${formatDayLabel(m.ts)}</span>`;
+        messagesEl.appendChild(sep);
+      }
+
+      const stayAtBottom = (messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight) < 80;
+
+      const row=document.createElement('div');
+      const isMe = (m.userId===userId);
+      row.className='msg-row '+(isMe?'me':'other');
+
+      let avatarHtml='';
+      if (!isMe){
+        const safeInitial = initialLetter(m.nickname||'');
+        if (m.avatar){
+          avatarHtml = `<button type="button" class="avatar-sm p-open" data-uid="${m.userId}" data-nick="${(m.nickname||'')}" data-av="${(m.avatar||'')}">
+                          <img src="${m.avatar}" onerror="this.remove();this.parentElement.textContent='${safeInitial}';" />
+                        </button>`;
+        } else {
+          avatarHtml = `<button type="button" class="avatar-sm p-open" data-uid="${m.userId}" data-nick="${(m.nickname||'')}" data-av=""><span>${safeInitial}</span></button>`;
+        }
+      } else { avatarHtml = `<div class="avatar-sm" style="display:none;"></div>`; }
+
+      let bubbleInner='';
+      if (m.kind==='image' && m.mediaUrl){
+        const key = m.mid || m.ts;
+        bubbleInner =
+          `<div><img id="img-${key}" src="${m.mediaUrl}" alt="${(m.fileName||'image')}" style="max-width:100%; border-radius:12px;" /></div>
+           <div class="meta">${(m.nickname||'')} · ${formatTimeLabel(m.ts)}</div>`;
+      } else {
+        bubbleInner =
+          `<div>${(m.text||'').replace(/\n/g,'<br/>')}</div>
+           <div class="meta">${(m.nickname||'')} · ${formatTimeLabel(m.ts)}</div>`;
+      }
+
+      const reactsHtml = renderReactsHtml(m);
+      row.innerHTML = `${avatarHtml}<div class="bubble">${bubbleInner}${reactsHtml}</div>`;
+      messagesEl.appendChild(row);
+
+      bindReactionHandlers(m.mid);
+
+      row.querySelectorAll('.p-open').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const uid = btn.getAttribute('data-uid');
+          const nn  = btn.getAttribute('data-nick') || 'User';
+          const av  = btn.getAttribute('data-av') || '';
+          openProfile(uid, nn, av);
+        });
+      });
+
+      const img = row.querySelector(m.kind==='image' ? `#img-${CSS.escape(m.mid||m.ts)}` : null);
+      if (img){ img.onerror = ()=>{ const a=document.createElement('a'); a.href=m.mediaUrl; a.target='_blank'; a.rel='noopener'; a.textContent='이미지 열기'; img.replaceWith(a); }; }
+
+      if (stayAtBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    /* ===== Data ===== */
+    async function fetchAndRender(forceScroll){
+      if(!userId) return;
+
+      try {
+        const since = lastTs[currentRoom] || 0;
+        const messages = await apiCall('GET', `/api/messages/${currentRoom}?since=${since}`);
+        
+        if(messages && messages.length){
+          messages.forEach(addOrUpdateMsg);
+          lastTs[currentRoom] = Math.max(lastTs[currentRoom]||0, messages[messages.length-1].ts||0);
+          if (forceScroll) messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+        const t = new Date().toLocaleTimeString();
+        el('#topStatus').textContent = `연결됨 · ${t}`;
+      } catch (error) {
+        console.error(error);
+        el('#topStatus').textContent = '연결 끊김';
+      }
+    }
+
+    async function initMe(){
+      try {
+        const u = await apiCall('POST', `/api/user/${userId}`);
+        me = u;
+        el('#nickname').value = u.nickname || '';
+        el('#status').value = u.status || '';
+        el('#avatar').value = u.avatar || '';
+        el('#clearAvatar').checked = false;
+        el('#nicknameView').textContent = u.nickname || 'User';
+        el('#statusView').textContent = u.status || '상태메시지…';
+        el('#topStatus').textContent = (u.nickname || 'User') + (u.status ? ` — ${u.status}` : '');
+        setAvatar(u.avatar || '');
+        drawTabs();
+        fetchAndRender(true);
+      } catch (error) {
+        console.error('사용자 정보 로드 실패:', error);
+      }
+    }
+
+    /* ===== Send / Upload ===== */
+    async function sendText(){
+      if(!userId||sending) return;
+      const t=el('#text'); const v=(t.value||'').trim(); if(!v) return;
+
+      const sendRoom = currentRoom;
+      sending=true; setBtnLoading(el('#sendBtn'), true);
+      const mid=mkMid();
+
+      try {
+        const result = await apiCall('POST', '/api/messages', {
+          room: sendRoom,
+          userId,
+          text: v,
+          mid
+        });
+        
+        sending=false; setBtnLoading(el('#sendBtn'), false); t.value='';
+        lastTs[sendRoom] = Math.max(lastTs[sendRoom]||0, result.ts||0);
+        if (currentRoom !== sendRoom) return;
+        // 실시간으로 이미 받았을 수 있으므로 중복 체크 후 추가
+        if (!renderedMids.has(result.mid)) {
+          addOrUpdateMsg(result);
+        }
+        beep();
+      } catch (error) {
+        sending=false; setBtnLoading(el('#sendBtn'), false);
+        alert('전송 실패: '+error.message);
+      }
+    }
+
+    /* ===== Logout ===== */
+    function doLogout(){
+      socket.emit('leaveRoom', currentRoom);
+      userId=null; me=null;
+      messagesEl.innerHTML='';
+      renderedMids.clear();
+      Object.keys(lastTs).forEach(k=> lastTs[k]=0);
+      Object.keys(lastDayRendered).forEach(k=> lastDayRendered[k]='');
+      setAvatar('');
+      ['nickname','status','avatar'].forEach(id=>{ const n=el('#'+id); if(n) n.value=''; });
+      const ca = el('#clearAvatar'); if (ca) ca.checked = false;
+      el('#nicknameView').textContent='User';
+      el('#statusView').textContent='상태메시지…';
+      el('#topStatus').textContent='—';
+      enableUI(false);
+
+      el('#loginName').value='';
+      el('#loginBirth').value='';
+      el('#auth').classList.remove('hidden');
+      document.body.classList.add('auth-open');
+
+      document.body.classList.remove('profile-open');
+      hideProfileModal();
+    }
+
+    function bindUI(){
+      el('#sendBtn').onclick=sendText;
+      el('#text').addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendText(); } });
+
+      // 프로필 저장
+      el('#saveBtn').onclick= async ()=>{
+        if(!userId) return;
+        const nickname = el('#nickname').value;
+        const status   = el('#status').value;
+        const avValue  = (el('#avatar').value||'').trim();
+        const clearAv  = el('#clearAvatar').checked;
+
+        const profile = { nickname, status };
+        if (clearAv) profile.clearAvatar = true;   
+        if (avValue) profile.avatar = avValue;     
+
+        try {
+          const u = await apiCall('PUT', `/api/profile/${userId}`, profile);
+          me = u;
+          el('#nicknameView').textContent = u.nickname || 'User';
+          el('#statusView').textContent = u.status || '상태메시지…';
+          el('#topStatus').textContent = (u.nickname || 'User') + (u.status ? ` — ${u.status}` : '');
+          setAvatar(u.avatar || '');
+          el('#avatar').value = u.avatar || '';
+          el('#clearAvatar').checked = false;
+          beep();
+        } catch (error) {
+          alert('저장 실패: ' + error.message);
+        }
+      };
+
+      // 아바타 입력 시 "지우기" 자동 해제
+      el('#avatar').addEventListener('input', ()=>{
+        if ((el('#avatar').value||'').trim()) el('#clearAvatar').checked = false;
+      });
+
+      // 사진 업로드
+      el('#photoBtn').onclick=()=>{ if(userId) el('#image').click(); };
+      el('#image').addEventListener('change', async ()=>{
+        const f=el('#image').files[0];
+        if(!userId||!f||uploading) return;
+        if(f.size>10*1024*1024){ alert('10MB 이하만 업로드 가능합니다.'); el('#image').value=''; return; }
+
+        const uploadRoom = currentRoom;
+        uploading=true; el('#photoBtn').disabled=true;
+        const mid = mkMid();
+
+        try {
+          const formData = new FormData();
+          formData.append('image', f);
+          formData.append('room', uploadRoom);
+          formData.append('userId', userId);
+          formData.append('mid', mid);
+
+          const response = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || '업로드 실패');
+          }
+
+          const result = await response.json();
+          uploading=false; el('#photoBtn').disabled=false; el('#image').value='';
+          lastTs[uploadRoom] = Math.max(lastTs[uploadRoom]||0, result.ts||0);
+          if (currentRoom !== uploadRoom) return;
+          if (!renderedMids.has(result.mid)) {
+            addOrUpdateMsg(result);
+          }
+          beep();
+        } catch (error) {
+          uploading=false; el('#photoBtn').disabled=false; el('#image').value='';
+          alert('업로드 실패: '+error.message);
+        }
+      });
+
+      el('#startBtn').onclick=doLogin;
+      el('#logoutBtn').onclick=doLogout;
+
+      // Retro toggle
+      el('#toggle98').addEventListener('click', ()=>{ applyTheme98(!document.body.classList.contains('win98')); beep(); });
+
+      // Profile drawer toggle (mobile)
+      el('#profileBtn').addEventListener('click', ()=>{ document.body.classList.add('profile-open'); });
+      el('#scrim').addEventListener('click', ()=>{ document.body.classList.remove('profile-open'); });
+
+      // 프로필 모달 기본 동작
+      bindProfileModalBasics();
+
+      // 드래그 가능한 로그인 다이얼로그
+      makeDialogDraggable('#dialogCard','#dlgDragHandle');
+
+      // 리사이즈 시 탭 라벨/상태 갱신
+      let lastCompact = isCompact();
+      window.addEventListener('resize', ()=>{
+        const nowCompact = isCompact();
+        if (nowCompact !== lastCompact){
+          drawTabs(); setActiveTabUI();
+          lastCompact = nowCompact;
+        }
+      });
+    }
+
+    /* ===== Login ===== */
+    async function doLogin(){
+      const card = el('#dialogCard');
+      const name=(el('#loginName').value||'').trim();
+      const b4=(el('#loginBirth').value||'').replace(/\D/g,'').slice(0,4);
+      if(!name || b4.length!==4){ card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); return; }
+
+      try {
+        const u = await apiCall('POST', '/api/login', { name, birth4: b4 });
+        userId = u.id;
+        el('#auth').classList.add('hidden'); 
+        document.body.classList.remove('auth-open');
+        enableUI(true); 
+        drawTabs(); 
+        initMe();
+        socket.emit('joinRoom', currentRoom);
+        beep();
+      } catch (error) {
+        alert('로그인 실패: ' + error.message);
+      }
+    }
+
+    // Dialog drag helper
+    function makeDialogDraggable(cardSel, handleSel){
+      const card = el(cardSel), handle = el(handleSel); if(!card||!handle) return;
+      let sx=0, sy=0, ox=0, oy=0, dragging=false;
+      const down=(e)=>{ dragging=true; const r=card.getBoundingClientRect(); ox=r.left; oy=r.top; sx=e.clientX; sy=e.clientY; handle.style.cursor='grabbing'; e.preventDefault(); };
+      const move=(e)=>{ if(!dragging) return; const dx=e.clientX-sx, dy=e.clientY-sy; card.style.position='fixed'; card.style.left=(ox+dx)+'px'; card.style.top=(oy+dy)+'px'; };
+      const up=()=>{ dragging=false; handle.style.cursor='grab'; };
+      handle.addEventListener('mousedown',down); window.addEventListener('mousemove',move); window.addEventListener('mouseup',up);
+    }
+
+    // Socket.io 이벤트 핸들러
+    socket.on('newMessage', (message) => {
+      if (message.room === currentRoom) {
+        addOrUpdateMsg(message);
+        lastTs[currentRoom] = Math.max(lastTs[currentRoom] || 0, message.ts || 0);
+      }
+    });
+
+    socket.on('reactionUpdate', (message) => {
+      if (message.room === currentRoom) {
+        updateReactsView(message);
+      }
+    });
+
+    /* ===== iOS 주소창 높이 변동 대응용 --vh 세팅 ===== */
+    (function setVhUnit(){
+      const setVh = () => {
+        const vh = window.innerHeight * 0.01;
+        document.documentElement.style.setProperty('--vh', `${vh}px`);
+      };
+      setVh();
+      window.addEventListener('resize', setVh, {passive:true});
+      window.addEventListener('orientationchange', setVh, {passive:true});
+    })();
+
+    // ===== Boot =====
+    (function boot(){
+      bindUI(); enableUI(false);
+      // 로그인 자동완성 방지 + 항상 빈칸
+      const ln=el('#loginName'), lb=el('#loginBirth');
+      ln.name='n_'+Math.random().toString(36).slice(2); lb.name='b_'+Math.random().toString(36).slice(2);
+      ln.value=''; lb.value='';
+      restoreTheme98(); // 테마 복원
+      attachBeepTo('.tab,.btn,.chip,.add-react,.pick');
+    })();
+  </script>
+</body>
+</html>
