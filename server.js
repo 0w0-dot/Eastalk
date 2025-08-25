@@ -6,9 +6,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
-const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
-const fs = require('fs');
 
 require('dotenv').config();
 
@@ -46,9 +44,6 @@ app.use(limiter);
 
 // 정적 파일 제공
 app.use(express.static('public'));
-// Render 배포 환경에서 올바른 업로드 경로 설정
-const uploadDir = process.env.NODE_ENV === 'production' ? '/tmp/uploads' : 'uploads';
-app.use('/uploads', express.static(uploadDir));
 
 // 🚀 Render Health Check 엔드포인트
 app.get('/health', (req, res) => {
@@ -217,56 +212,16 @@ const isValidUserId = (userId) => {
   return userId && typeof userId === 'string' && userId.length > 0;
 };
 
-// ===== 업로드 설정 =====
-// 업로드 디렉토리 확인 및 생성
-const ensureUploadDir = () => {
-  const uploadDir = process.env.NODE_ENV === 'production' ? '/tmp/uploads' : 'uploads';
-  try {
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-      console.log(`📁 업로드 디렉토리 생성: ${uploadDir}`);
-    }
-    return uploadDir;
-  } catch (error) {
-    console.error('❌ 업로드 디렉토리 생성 실패:', error);
-    throw error;
-  }
+// ===== 이미지 검증 헬퍼 함수 =====
+const validateImageType = (mimeType) => {
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/bmp'];
+  return allowedTypes.includes(mimeType?.toLowerCase());
 };
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    try {
-      const uploadDir = ensureUploadDir();
-      cb(null, uploadDir);
-    } catch (error) {
-      cb(error);
-    }
-  },
-  filename: (req, file, cb) => {
-    // 더 안전한 파일명 생성
-    const timestamp = Date.now();
-    const random = Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname).toLowerCase();
-    const safeFilename = `${timestamp}-${random}${ext}`;
-    cb(null, safeFilename);
-  }
-});
-
-const upload = multer({
-  storage: storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif|webp|bmp|svg/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-    
-    if (mimetype && extname) {
-      return cb(null, true);
-    } else {
-      cb(new Error('이미지 파일만 업로드 가능합니다.'));
-    }
-  }
-});
+const isValidBase64Image = (data) => {
+  if (!data || typeof data !== 'string') return false;
+  return data.startsWith('data:image/') && data.includes('base64,');
+};
 
 // API 라우트들
 
@@ -659,10 +614,10 @@ app.get('/api/messages/:room', async (req, res) => {
   }
 });
 
-// 이미지 업로드 API (Render 최적화)
-app.post('/api/upload', upload.single('image'), async (req, res) => {
+// 이미지 업로드 API (base64 저장 방식)
+app.post('/api/upload', async (req, res) => {
   try {
-    const { room, userId, mid } = req.body;
+    const { room, userId, mid, imageData, fileName, mimeType } = req.body;
     
     // 입력 검증 추가
     if (!isValidUserId(userId)) {
@@ -675,6 +630,26 @@ app.post('/api/upload', upload.single('image'), async (req, res) => {
     
     if (!mid || typeof mid !== 'string') {
       return res.status(400).json({ error: '유효하지 않은 메시지 ID입니다.' });
+    }
+    
+    if (!imageData || typeof imageData !== 'string') {
+      return res.status(400).json({ error: '이미지 데이터가 없습니다.' });
+    }
+    
+    // base64 이미지 데이터 검증
+    if (!isValidBase64Image(imageData)) {
+      return res.status(400).json({ error: '올바른 이미지 형식이 아닙니다.' });
+    }
+    
+    // MIME 타입 검증
+    if (mimeType && !validateImageType(mimeType)) {
+      return res.status(400).json({ error: '지원하지 않는 이미지 형식입니다.' });
+    }
+    
+    // base64 데이터 크기 검증 (대략 10MB 제한)
+    const base64Size = imageData.length * 0.75; // base64는 원본의 약 1.33배
+    if (base64Size > 10 * 1024 * 1024) {
+      return res.status(400).json({ error: '이미지 크기가 10MB를 초과했습니다.' });
     }
     
     // 중복 메시지 체크
@@ -698,10 +673,6 @@ app.post('/api/upload', upload.single('image'), async (req, res) => {
       });
     }
     
-    if (!req.file) {
-      return res.status(400).json({ error: '이미지가 없습니다.' });
-    }
-    
     let user;
     if (USE_MEMORY_DB) {
       user = memoryUsers.get(userId);
@@ -710,8 +681,6 @@ app.post('/api/upload', upload.single('image'), async (req, res) => {
     }
     const nickname = user ? user.nickname : ('User-' + userId.slice(-5));
     
-    // Render에서는 /uploads 경로로 직접 제공
-    const mediaUrl = `/uploads/${req.file.filename}`;
     const ts = Date.now();
     
     const messageData = {
@@ -721,9 +690,9 @@ app.post('/api/upload', upload.single('image'), async (req, res) => {
       nickname,
       text: '',
       kind: 'image',
-      mediaUrl,
-      mime: req.file.mimetype,
-      fileName: req.file.originalname,
+      mediaUrl: imageData, // base64 데이터를 직접 저장
+      mime: mimeType || 'image/jpeg',
+      fileName: fileName || 'image.jpg',
       mid: mid || uuidv4(),
       reactions: {}
     };
@@ -910,31 +879,6 @@ app.use((error, req, res, next) => {
     timestamp: new Date().toISOString()
   });
   
-  // Multer 에러 처리
-  if (error instanceof multer.MulterError) {
-    switch (error.code) {
-      case 'LIMIT_FILE_SIZE':
-        return res.status(400).json({ 
-          error: '파일 크기가 10MB를 초과했습니다.',
-          code: 'FILE_TOO_LARGE'
-        });
-      case 'LIMIT_FILE_COUNT':
-        return res.status(400).json({ 
-          error: '한 번에 하나의 파일만 업로드 가능합니다.',
-          code: 'TOO_MANY_FILES'
-        });
-      case 'LIMIT_UNEXPECTED_FILE':
-        return res.status(400).json({ 
-          error: '예상치 못한 파일 필드입니다.',
-          code: 'UNEXPECTED_FIELD'
-        });
-      default:
-        return res.status(400).json({ 
-          error: '업로드 오류가 발생했습니다.',
-          code: 'UPLOAD_ERROR'
-        });
-    }
-  }
   
   // 일반 에러 처리
   const statusCode = error.status || error.statusCode || 500;
