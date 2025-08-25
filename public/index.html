@@ -317,10 +317,10 @@
         <!-- 추가: 아바타 지우기 -->
         <label class="status" style="display:flex;align-items:center;gap:6px;">
           <input type="checkbox" id="clearAvatar" disabled />
-          아바타 지우기
+          프로필 사진 지우기
         </label>
         <button id="saveBtn" class="btn btn-primary" disabled>프로필 저장</button>
-        <div class="status">* 로그인 완료 후 사용 가능합니다.</div>
+        <div class="status" id="loginNotice">* 로그인 완료 후 사용 가능합니다.</div>
       </div>
 
       <!-- 현재 접속자 -->
@@ -543,6 +543,8 @@
       DOM.el('.wrap').setAttribute('aria-disabled', enable ? 'false' : 'true');
       // 헤더 로그아웃 버튼 토글
       DOM.el('#logoutBtn').style.display = enable ? 'inline-flex' : 'none';
+      // 로그인 안내 문구 토글
+      DOM.el('#loginNotice').style.display = enable ? 'none' : 'block';
     }
     function setAvatar(url){ const img=DOM.el('#avatarImg'); if(url&&url.trim()){ img.src=url; img.style.visibility='visible'; } else { img.removeAttribute('src'); img.style.visibility='hidden'; } }
 
