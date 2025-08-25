@@ -71,11 +71,17 @@
 5. **배포 확인 및 테스트**
 
 ### 🔐 필요한 환경변수
-```
-MONGODB_URI=mongodb://localhost:27017/eastalk (또는 MongoDB Atlas URL)
+```bash
+# Render Dashboard에서 설정할 환경변수:
+MONGODB_URI=mongodb+srv://skdnckd:s11780178S!@eastalk.dstmx07.mongodb.net/?retryWrites=true&w=majority&appName=Eastalk
 NODE_ENV=production
-PORT=3000
+# PORT는 Render에서 자동 제공
 ```
+
+### 🚀 **즉시 배포 가능!**
+- MongoDB Atlas 연결 정보 확보 ✅
+- 모든 Render 요구사항 충족 ✅  
+- GitHub 저장소 준비 완료 ✅
 
 ### 🔍 테스트 체크리스트
 - [ ] 페이지 로드 확인
