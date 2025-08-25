@@ -25,6 +25,9 @@ const io = socketIO(server, {
 const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
 
+// Render 프록시 신뢰 설정 (Rate Limiter 오류 해결)
+app.set('trust proxy', 1);
+
 // 미들웨어 설정
 app.use(helmet({
   contentSecurityPolicy: false // Render에서 필요
