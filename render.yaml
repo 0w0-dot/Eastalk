@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: eastalk-web
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false # This should be set as a secret in Render Dashboard
+    instanceCount: 1
+    plan: starter # Can be changed to 'free' for testing
+    region: oregon
+    branch: main
+    autoDeploy: true
+    
+# Optional: Add Redis for session storage or caching
+# - type: redis
+#   name: eastalk-redis
+#   plan: starter
+#   region: oregon
+#   ipAllowList: [] # only allow internal connections
