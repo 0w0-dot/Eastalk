@@ -63,6 +63,9 @@ let memoryUsers = new Map();
 let memoryMessages = new Map();
 let messageCounter = 1;
 
+// 전역 접속자 관리 저장소
+let connectedUsers = new Map(); // socketId → userInfo
+
 if (USE_MEMORY_DB) {
   console.log('🧪 테스트 모드: In-Memory 데이터베이스 사용');
   console.log(`🌍 환경: ${process.env.NODE_ENV || 'development'}`);
@@ -201,6 +204,71 @@ const MemoryDB = {
 };
 
 const nowIso = () => new Date().toISOString();
+
+// ===== 접속자 관리 헬퍼 함수들 =====
+const ConnectedUsersManager = {
+  // 접속자 추가
+  addUser: (socketId, userInfo) => {
+    const userData = {
+      socketId,
+      userId: userInfo.userId,
+      nickname: userInfo.nickname || 'User',
+      avatar: userInfo.avatar || '',
+      status: userInfo.status || '',
+      connectedAt: nowIso()
+    };
+    connectedUsers.set(socketId, userData);
+    console.log(`👤 접속자 추가: ${userData.nickname} (${connectedUsers.size}명)`);
+    return userData;
+  },
+  
+  // 접속자 제거
+  removeUser: (socketId) => {
+    const userData = connectedUsers.get(socketId);
+    if (userData) {
+      connectedUsers.delete(socketId);
+      console.log(`👤 접속자 제거: ${userData.nickname} (${connectedUsers.size}명)`);
+      return userData;
+    }
+    return null;
+  },
+  
+  // 접속자 정보 업데이트
+  updateUser: (socketId, updates) => {
+    const userData = connectedUsers.get(socketId);
+    if (userData) {
+      Object.assign(userData, updates);
+      connectedUsers.set(socketId, userData);
+      console.log(`👤 접속자 정보 업데이트: ${userData.nickname}`);
+      return userData;
+    }
+    return null;
+  },
+  
+  // userId로 접속자 찾기
+  findByUserId: (userId) => {
+    for (const [socketId, userData] of connectedUsers) {
+      if (userData.userId === userId) {
+        return { socketId, userData };
+      }
+    }
+    return null;
+  },
+  
+  // 전체 접속자 목록 반환
+  getAllUsers: () => {
+    return Array.from(connectedUsers.values()).map(user => ({
+      userId: user.userId,
+      nickname: user.nickname,
+      avatar: user.avatar,
+      status: user.status,
+      connectedAt: user.connectedAt
+    }));
+  },
+  
+  // 접속자 수 반환
+  getCount: () => connectedUsers.size
+};
 
 // 입력 검증 헬퍼
 const validateRoom = (room) => ROOMS.includes(room);
@@ -824,6 +892,85 @@ app.get('/api/ping', (req, res) => {
 io.on('connection', (socket) => {
   console.log('👤 사용자 연결:', socket.id);
   
+  // 사용자 로그인 처리 (접속자 목록에 추가)
+  socket.on('userLogin', async (data) => {
+    try {
+      const { userId } = data;
+      if (!userId) return;
+      
+      // 기존 연결이 있는지 확인
+      const existingConnection = ConnectedUsersManager.findByUserId(userId);
+      if (existingConnection) {
+        // 기존 소켓 연결 해제
+        const existingSocket = io.sockets.sockets.get(existingConnection.socketId);
+        if (existingSocket) {
+          existingSocket.disconnect();
+        }
+        ConnectedUsersManager.removeUser(existingConnection.socketId);
+      }
+      
+      // 사용자 정보 가져오기
+      let user;
+      if (USE_MEMORY_DB) {
+        user = memoryUsers.get(userId);
+      } else {
+        user = await User.findOne({ id: userId });
+      }
+      
+      if (user) {
+        // 접속자 목록에 추가
+        const userData = ConnectedUsersManager.addUser(socket.id, {
+          userId: user.id,
+          nickname: user.nickname || 'User',
+          avatar: user.avatar || '',
+          status: user.status || ''
+        });
+        
+        // 전체에게 새 접속자 알림
+        io.emit('userConnected', {
+          userId: userData.userId,
+          nickname: userData.nickname,
+          avatar: userData.avatar,
+          status: userData.status
+        });
+        
+        // 현재 접속자 목록 전송
+        socket.emit('connectedUsersList', {
+          users: ConnectedUsersManager.getAllUsers(),
+          count: ConnectedUsersManager.getCount()
+        });
+      }
+    } catch (error) {
+      console.error('사용자 로그인 처리 오류:', error);
+    }
+  });
+  
+  // 사용자 프로필 업데이트 처리
+  socket.on('userProfileUpdated', (data) => {
+    try {
+      const { userId, nickname, avatar, status } = data;
+      
+      // 접속자 정보 업데이트
+      const updatedUser = ConnectedUsersManager.updateUser(socket.id, {
+        nickname: nickname || 'User',
+        avatar: avatar || '',
+        status: status || ''
+      });
+      
+      if (updatedUser) {
+        // 전체에게 프로필 변경 알림
+        io.emit('userProfileUpdated', {
+          userId: updatedUser.userId,
+          nickname: updatedUser.nickname,
+          avatar: updatedUser.avatar,
+          status: updatedUser.status
+        });
+      }
+    } catch (error) {
+      console.error('프로필 업데이트 처리 오류:', error);
+    }
+  });
+  
   // 방 입장 처리
   socket.on('joinRoom', (room) => {
     try {
@@ -834,9 +981,6 @@ io.on('connection', (socket) => {
       
       socket.join(room);
       console.log(`📱 ${socket.id} -> ${room} 방 입장`);
-      
-      // 입장 알림 (TODO: 실시간 접속자 수 기능 추가 시 사용)
-      // socket.to(room).emit('userJoined', { socketId: socket.id });
     } catch (error) {
       console.error('방 입장 오류:', error);
       socket.emit('error', { message: '방 입장에 실패했습니다.' });
@@ -848,9 +992,6 @@ io.on('connection', (socket) => {
     try {
       socket.leave(room);
       console.log(`📱 ${socket.id} <- ${room} 방 퇴장`);
-      
-      // 퇴장 알림 (TODO: 실시간 접속자 수 기능 추가 시 사용)
-      // socket.to(room).emit('userLeft', { socketId: socket.id });
     } catch (error) {
       console.error('방 퇴장 오류:', error);
     }
@@ -859,7 +1000,16 @@ io.on('connection', (socket) => {
   // 연결 해제 처리
   socket.on('disconnect', (reason) => {
     console.log(`👤 사용자 연결 해제: ${socket.id} (${reason})`);
-    // TODO: 모든 방에서 퇴장 알림 발송
+    
+    // 접속자 목록에서 제거
+    const removedUser = ConnectedUsersManager.removeUser(socket.id);
+    if (removedUser) {
+      // 전체에게 접속 해제 알림
+      io.emit('userDisconnected', {
+        userId: removedUser.userId,
+        nickname: removedUser.nickname
+      });
+    }
   });
   
   // 에러 처리

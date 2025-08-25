@@ -158,6 +158,8 @@
         top:56px; bottom:calc(84px + env(safe-area-inset-bottom)); left:8px; right:8px;
         border-radius:16px; overflow:auto; -webkit-overflow-scrolling:touch; touch-action:pan-y;
       }
+      /* 모바일 접속자 목록 */
+      .connected-users .user-avatar{ width:28px; height:28px; font-size:11px; }
       .btn{ height:40px; }
       .btn-icon{ width:40px; }
       .bubble{ max-width:92%; }
@@ -167,6 +169,9 @@
     @media (max-width: 480px){
       .composer .input{ height:44px; }
       .tabs .tab{ max-width:70vw; }
+      /* 더 작은 화면에서 접속자 아바타 크기 조정 */
+      .connected-users .user-avatar{ width:26px; height:26px; font-size:10px; }
+      .connected-users .users-grid{ gap:3px; }
     }
 
     /* ===== Day separator (카톡 스타일) ===== */
@@ -178,6 +183,34 @@
       background:#c0c0c0;
       border:2px solid #c0c0c0; border-top-color:#fff; border-left-color:#fff;
       border-right-color:#404040; border-bottom-color:#404040;
+    }
+
+    /* ===== Connected Users ===== */
+    .connected-users{ margin-top:16px; }
+    .connected-header{ font-size:12px; color:var(--muted); margin-bottom:8px; font-weight:500; }
+    .users-grid{ display:flex; flex-wrap:wrap; gap:4px; }
+    .user-avatar{ 
+      width:32px; height:32px; border-radius:50%; background:#e5e7eb; 
+      overflow:hidden; cursor:pointer; border:2px solid transparent;
+      transition:border-color .15s, transform .02s;
+      display:flex; align-items:center; justify-content:center;
+      font-size:12px; color:#6b7280; font-weight:500;
+    }
+    .user-avatar:hover{ border-color:var(--accent); transform:scale(1.05); }
+    .user-avatar img{ width:100%; height:100%; object-fit:cover; display:block; }
+
+    /* Win98 스타일 */
+    body.win98 .connected-users{ border-top:1px solid #808080; padding-top:8px; }
+    body.win98 .connected-header{ color:#404040; }
+    body.win98 .user-avatar{ 
+      background:#c0c0c0; color:#000;
+      border:2px solid #c0c0c0; border-top-color:#fff; border-left-color:#fff;
+      border-right-color:#404040; border-bottom-color:#404040;
+    }
+    body.win98 .user-avatar:hover{ 
+      border-top-color:#404040; border-left-color:#404040;
+      border-right-color:#fff; border-bottom-color:#fff;
+      transform:none;
     }
 
     /* ===== Profile Modal ===== */
@@ -289,6 +322,12 @@
         <button id="saveBtn" class="btn btn-primary" disabled>프로필 저장</button>
         <div class="status">* 로그인 완료 후 사용 가능합니다.</div>
       </div>
+
+      <!-- 현재 접속자 -->
+      <div class="connected-users" id="connectedUsers" style="display:none">
+        <div class="connected-header" id="connectedHeader">현재 접속자 (0)</div>
+        <div class="users-grid" id="usersGrid"></div>
+      </div>
     </aside>
 
     <!-- RIGHT -->
@@ -374,7 +413,8 @@
         },
         lastTs: { '주중': 0, '주말': 0, '전체': 0, '방문예정': 0 },
         lastDayRendered: { '주중': '', '주말': '', '전체': '', '방문예정': '' }
-      }
+      },
+      connectedUsers: [] // 현재 접속자 목록
     };
 
     // Socket.io 연결
@@ -597,6 +637,87 @@
       return UI.labelFor(roomName);
     }
     function initialLetter(name){ const t=String(name||'').trim(); return t? t[0].toUpperCase() : 'U'; }
+
+    /* ===== 접속자 관리 ===== */
+    const ConnectedUsersUI = {
+      // 접속자 목록 렌더링
+      render: (users) => {
+        const container = DOM.el('#usersGrid');
+        const header = DOM.el('#connectedHeader');
+        const section = DOM.el('#connectedUsers');
+        
+        if (!users || users.length === 0) {
+          section.style.display = 'none';
+          return;
+        }
+        
+        // 헤더 업데이트
+        header.textContent = `현재 접속자 (${users.length})`;
+        
+        // 아바타 그리드 렌더링
+        container.innerHTML = users.map(user => {
+          const safeInitial = initialLetter(user.nickname || '');
+          if (user.avatar && user.avatar.trim()) {
+            return `<div class="user-avatar" data-user-id="${user.userId}" data-nickname="${(user.nickname||'')}" data-avatar="${(user.avatar||'')}" data-status="${(user.status||'')}" title="${user.nickname || 'User'}">
+                      <img src="${user.avatar}" onerror="this.remove();this.parentElement.textContent='${safeInitial}';" />
+                    </div>`;
+          } else {
+            return `<div class="user-avatar" data-user-id="${user.userId}" data-nickname="${(user.nickname||'')}" data-avatar="" data-status="${(user.status||'')}" title="${user.nickname || 'User'}">
+                      <span>${safeInitial}</span>
+                    </div>`;
+          }
+        }).join('');
+        
+        // 클릭 이벤트 바인딩
+        container.querySelectorAll('.user-avatar').forEach(avatar => {
+          avatar.addEventListener('click', () => {
+            const userId = avatar.getAttribute('data-user-id');
+            const nickname = avatar.getAttribute('data-nickname') || 'User';
+            const avatarUrl = avatar.getAttribute('data-avatar') || '';
+            const status = avatar.getAttribute('data-status') || '';
+            
+            openProfile(userId, nickname, avatarUrl);
+          });
+        });
+        
+        // 섹션 표시
+        section.style.display = 'block';
+      },
+      
+      // 사용자 추가
+      addUser: (user) => {
+        const existingIndex = AppState.connectedUsers.findIndex(u => u.userId === user.userId);
+        if (existingIndex >= 0) {
+          // 기존 사용자 업데이트
+          AppState.connectedUsers[existingIndex] = user;
+        } else {
+          // 새 사용자 추가
+          AppState.connectedUsers.push(user);
+        }
+        ConnectedUsersUI.render(AppState.connectedUsers);
+      },
+      
+      // 사용자 제거
+      removeUser: (userId) => {
+        AppState.connectedUsers = AppState.connectedUsers.filter(u => u.userId !== userId);
+        ConnectedUsersUI.render(AppState.connectedUsers);
+      },
+      
+      // 사용자 정보 업데이트
+      updateUser: (user) => {
+        const existingIndex = AppState.connectedUsers.findIndex(u => u.userId === user.userId);
+        if (existingIndex >= 0) {
+          AppState.connectedUsers[existingIndex] = { ...AppState.connectedUsers[existingIndex], ...user };
+          ConnectedUsersUI.render(AppState.connectedUsers);
+        }
+      },
+      
+      // 전체 목록 설정
+      setUsers: (users) => {
+        AppState.connectedUsers = users || [];
+        ConnectedUsersUI.render(AppState.connectedUsers);
+      }
+    };
 
     /* ===== API 호출 함수들 ===== */
     async function apiCall(method, url, body = null) {
@@ -897,6 +1018,9 @@
 
       document.body.classList.remove('profile-open');
       hideProfileModal();
+      
+      // 접속자 목록 초기화
+      ConnectedUsersUI.setUsers([]);
     }
 
     function bindUI(){
@@ -924,6 +1048,15 @@
           setAvatar(u.avatar || '');
           DOM.el('#avatar').value = u.avatar || '';
           DOM.el('#clearAvatar').checked = false;
+          
+          // 접속자 정보 업데이트 알림
+          socket.emit('userProfileUpdated', {
+            userId: AppState.userId,
+            nickname: u.nickname,
+            avatar: u.avatar,
+            status: u.status
+          });
+          
           beep();
         } catch (error) {
           alert('저장 실패: ' + error.message);
@@ -1045,6 +1178,10 @@
         UI.drawTabs(); 
         initMe();
         socket.emit('joinRoom', AppState.currentRoom);
+        
+        // 접속자 목록에 추가
+        socket.emit('userLogin', { userId: AppState.userId });
+        
         beep();
       } catch (error) {
         console.error('Login error:', error);
@@ -1076,6 +1213,23 @@
       if (message.room === AppState.currentRoom) {
         updateReactsView(message);
       }
+    });
+
+    // ===== 접속자 관련 Socket 이벤트 =====
+    socket.on('connectedUsersList', (data) => {
+      ConnectedUsersUI.setUsers(data.users || []);
+    });
+
+    socket.on('userConnected', (user) => {
+      ConnectedUsersUI.addUser(user);
+    });
+
+    socket.on('userDisconnected', (data) => {
+      ConnectedUsersUI.removeUser(data.userId);
+    });
+
+    socket.on('userProfileUpdated', (user) => {
+      ConnectedUsersUI.updateUser(user);
     });
 
     /* ===== iOS 주소창 높이 변동 대응용 --vh 세팅 ===== */
