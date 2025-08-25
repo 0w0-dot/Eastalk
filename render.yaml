@@ -13,7 +13,7 @@ services:
     plan: starter # Can be changed to 'free' for testing
     region: oregon
     branch: main
-    autoDeploy: true
+    autoDeploy: false # 프로덕션은 수동 배포로 변경
     
 # Optional: Add Redis for session storage or caching
 # - type: redis
