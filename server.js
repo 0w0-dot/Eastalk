@@ -119,22 +119,56 @@ const Message = mongoose.model('Message', MessageSchema);
 const ROOMS = ['주중', '주말', '전체', '방문예정'];
 const SCAN_LIMIT = 1000;
 
-// 헬퍼 함수들
-const normBirth4 = (x) => String(x == null ? '' : x).replace(/\D/g, '').slice(-4).padStart(4, '0');
+// ===== 헬퍼 함수들 =====
+const normBirth4 = (x) => {
+  if (x == null) return '0000';
+  return String(x).replace(/\D/g, '').slice(-4).padStart(4, '0');
+};
+
 const nowIso = () => new Date().toISOString();
 
-// 🎨 Render용 업로드 설정 (임시 디렉토리 사용)
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = process.env.NODE_ENV === 'production' ? '/tmp/uploads' : 'uploads';
+// 입력 검증 헬퍼
+const validateRoom = (room) => ROOMS.includes(room);
+const sanitizeText = (text, maxLength = 2000) => {
+  if (typeof text !== 'string') return '';
+  return text.trim().slice(0, maxLength);
+};
+const isValidUserId = (userId) => {
+  return userId && typeof userId === 'string' && userId.length > 0;
+};
+
+// ===== 업로드 설정 =====
+// 업로드 디렉토리 확인 및 생성
+const ensureUploadDir = () => {
+  const uploadDir = process.env.NODE_ENV === 'production' ? '/tmp/uploads' : 'uploads';
+  try {
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
+      console.log(`📁 업로드 디렉토리 생성: ${uploadDir}`);
     }
-    cb(null, uploadDir);
+    return uploadDir;
+  } catch (error) {
+    console.error('❌ 업로드 디렉토리 생성 실패:', error);
+    throw error;
+  }
+};
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    try {
+      const uploadDir = ensureUploadDir();
+      cb(null, uploadDir);
+    } catch (error) {
+      cb(error);
+    }
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+    // 더 안전한 파일명 생성
+    const timestamp = Date.now();
+    const random = Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname).toLowerCase();
+    const safeFilename = `${timestamp}-${random}${ext}`;
+    cb(null, safeFilename);
   }
 });
 
@@ -274,18 +308,27 @@ app.put('/api/profile/:userId', async (req, res) => {
   }
 });
 
-// 로그인 API
+// ===== 로그인 API =====
 app.post('/api/login', async (req, res) => {
   try {
     const { name, birth4 } = req.body;
-    const nm = String(name || '').trim();
+    
+    // 입력 검증 및 정규화
+    const nm = sanitizeText(name, 50);
     const b4 = normBirth4(birth4);
     
-    if (!nm) {
-      return res.status(400).json({ error: '이름을 입력하세요.' });
+    // 유효성 검사
+    if (!nm || nm.length < 2) {
+      return res.status(400).json({ 
+        error: '이름은 2자 이상 입력하세요.',
+        field: 'name'
+      });
     }
-    if (b4.length !== 4) {
-      return res.status(400).json({ error: '생일 4자리를 정확히 입력하세요.(MMDD)' });
+    if (b4.length !== 4 || b4 === '0000') {
+      return res.status(400).json({ 
+        error: '생일 4자리를 정확히 입력하세요.(MMDD)',
+        field: 'birth4'
+      });
     }
     
     // 기존 사용자 찾기
@@ -326,28 +369,44 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// 메시지 관련 API
+// ===== 메시지 관련 API =====
 app.post('/api/messages', async (req, res) => {
   try {
     const { room, userId, text, mid } = req.body;
     
-    if (!ROOMS.includes(room)) {
-      return res.status(400).json({ error: 'Invalid room' });
-    }
-    
-    // 중복 메시지 체크
-    const existingMsg = await Message.findOne({ mid });
-    if (existingMsg) {
-      const user = await User.findOne({ id: existingMsg.userId });
-      return res.json({
-        ...existingMsg.toObject(),
-        avatar: user ? user.avatar : ''
+    // 입력 검증
+    if (!validateRoom(room)) {
+      return res.status(400).json({ 
+        error: '잘못된 방 이름입니다.',
+        field: 'room'
       });
     }
     
-    const cleaned = String(text || '').trim().slice(0, 2000);
+    if (!isValidUserId(userId)) {
+      return res.status(400).json({ 
+        error: '유효하지 않은 사용자 ID입니다.',
+        field: 'userId'
+      });
+    }
+    
+    // 중복 메시지 체크
+    if (mid) {
+      const existingMsg = await Message.findOne({ mid });
+      if (existingMsg) {
+        const user = await User.findOne({ id: existingMsg.userId });
+        return res.json({
+          ...existingMsg.toObject(),
+          avatar: user ? user.avatar : ''
+        });
+      }
+    }
+    
+    const cleaned = sanitizeText(text);
     if (!cleaned) {
-      return res.status(400).json({ error: '빈 메시지' });
+      return res.status(400).json({ 
+        error: '메시지 내용을 입력하세요.',
+        field: 'text'
+      });
     }
     
     const user = await User.findOne({ id: userId });
@@ -572,39 +631,99 @@ app.get('/api/ping', (req, res) => {
   });
 });
 
-// Socket.IO 연결 처리
+// ===== Socket.IO 연결 처리 =====
 io.on('connection', (socket) => {
   console.log('👤 사용자 연결:', socket.id);
   
+  // 방 입장 처리
   socket.on('joinRoom', (room) => {
-    if (ROOMS.includes(room)) {
+    try {
+      if (!validateRoom(room)) {
+        socket.emit('error', { message: '잘못된 방 이름입니다.' });
+        return;
+      }
+      
       socket.join(room);
-      console.log(`📱 ${socket.id}이 ${room} 방에 입장`);
+      console.log(`📱 ${socket.id} -> ${room} 방 입장`);
+      
+      // 입장 알림 (TODO: 실시간 접속자 수 기능 추가 시 사용)
+      // socket.to(room).emit('userJoined', { socketId: socket.id });
+    } catch (error) {
+      console.error('방 입장 오류:', error);
+      socket.emit('error', { message: '방 입장에 실패했습니다.' });
     }
   });
   
+  // 방 퇴장 처리
   socket.on('leaveRoom', (room) => {
-    socket.leave(room);
-    console.log(`📱 ${socket.id}이 ${room} 방에서 퇴장`);
+    try {
+      socket.leave(room);
+      console.log(`📱 ${socket.id} <- ${room} 방 퇴장`);
+      
+      // 퇴장 알림 (TODO: 실시간 접속자 수 기능 추가 시 사용)
+      // socket.to(room).emit('userLeft', { socketId: socket.id });
+    } catch (error) {
+      console.error('방 퇴장 오류:', error);
+    }
   });
   
-  socket.on('disconnect', () => {
-    console.log('👤 사용자 연결 해제:', socket.id);
+  // 연결 해제 처리
+  socket.on('disconnect', (reason) => {
+    console.log(`👤 사용자 연결 해제: ${socket.id} (${reason})`);
+    // TODO: 모든 방에서 퇴장 알림 발송
+  });
+  
+  // 에러 처리
+  socket.on('error', (error) => {
+    console.error('Socket 에러:', error);
   });
 });
 
-// 에러 핸들러
+// ===== 에러 핸들러 =====
 app.use((error, req, res, next) => {
-  console.error('서버 오류:', error);
+  // 에러 로깅 개선
+  console.error('서버 에러:', {
+    message: error.message,
+    stack: isProduction ? null : error.stack,
+    url: req.url,
+    method: req.method,
+    timestamp: new Date().toISOString()
+  });
   
+  // Multer 에러 처리
   if (error instanceof multer.MulterError) {
-    if (error.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ error: '파일 크기가 10MB를 초과했습니다.' });
+    switch (error.code) {
+      case 'LIMIT_FILE_SIZE':
+        return res.status(400).json({ 
+          error: '파일 크기가 10MB를 초과했습니다.',
+          code: 'FILE_TOO_LARGE'
+        });
+      case 'LIMIT_FILE_COUNT':
+        return res.status(400).json({ 
+          error: '한 번에 하나의 파일만 업로드 가능합니다.',
+          code: 'TOO_MANY_FILES'
+        });
+      case 'LIMIT_UNEXPECTED_FILE':
+        return res.status(400).json({ 
+          error: '예상치 못한 파일 필드입니다.',
+          code: 'UNEXPECTED_FIELD'
+        });
+      default:
+        return res.status(400).json({ 
+          error: '업로드 오류가 발생했습니다.',
+          code: 'UPLOAD_ERROR'
+        });
     }
   }
   
-  res.status(500).json({ 
-    error: isProduction ? '서버 오류가 발생했습니다.' : error.message 
+  // 일반 에러 처리
+  const statusCode = error.status || error.statusCode || 500;
+  res.status(statusCode).json({ 
+    error: isProduction 
+      ? '서버 오류가 발생했습니다.' 
+      : error.message,
+    code: error.code || 'INTERNAL_ERROR',
+    ...(isProduction ? {} : { stack: error.stack })
   });
 });
 

@@ -346,45 +346,119 @@
   </div>
 
   <script>
-    /* ===== State ===== */
-    const ROOMS = ['주중','주말','전체','방문예정'];
-    const EMOJIS = ['👍','😂','😮','😢','😡','❤️'];
-    let currentRoom = '주중';
-    let userId = null;
-    let sending=false, uploading=false;
-    const renderedMids = new Set();
-    let me=null;
-    const lastTs = { '주중':0, '주말':0, '전체':0, '방문예정':0 };
-    const lastDayRendered = { '주중':'', '주말':'', '전체':'', '방문예정':'' };
+    /* ===== 상태 관리 =====*/
+    // 상수 정의
+    const CONFIG = {
+      ROOMS: ['주중', '주말', '전체', '방문예정'],
+      EMOJIS: ['👍', '😂', '😮', '😢', '😡', '❤️'],
+      MAX_MESSAGE_LENGTH: 2000,
+      MAX_FILE_SIZE: 10 * 1024 * 1024, // 10MB
+      SCROLL_THRESHOLD: 80
+    };
+    
+    // 전역 상태
+    const AppState = {
+      currentRoom: '주중',
+      userId: null,
+      me: null,
+      flags: {
+        sending: false,
+        uploading: false
+      },
+      cache: {
+        renderedMids: new Set(),
+        lastTs: { '주중': 0, '주말': 0, '전체': 0, '방문예정': 0 },
+        lastDayRendered: { '주중': '', '주말': '', '전체': '', '방문예정': '' }
+      }
+    };
 
     // Socket.io 연결
     const socket = io();
 
-    /* ===== Helpers ===== */
-    const el = s => document.querySelector(s);
-    const messagesEl = el('#messages');
-    const mkMid = () => 'mid-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
-    const signatureOf = (reactions)=>{
-      const o = reactions || {}; const keys = Object.keys(o).sort((a,b)=>a.localeCompare(b));
-      const norm = {}; keys.forEach(k=>{ norm[k]=[...(o[k]||[])].sort(); });
-      return JSON.stringify(norm);
+    /* ===== 도우미 함수들 ===== */
+    // DOM 유틸리티
+    const DOM = {
+      el: (selector) => document.querySelector(selector),
+      elAll: (selector) => document.querySelectorAll(selector),
+      create: (tag, className) => {
+        const el = document.createElement(tag);
+        if (className) el.className = className;
+        return el;
+      }
     };
-    const setBtnLoading = (btn, on)=>{
-      const sp = btn.querySelector('.spinner'); const lb = btn.querySelector('.label-txt');
-      if (on){ if(sp) sp.style.display='inline-block'; if(lb) lb.style.display='none'; btn.disabled=true; }
-      else { if(sp) sp.style.display='none'; if(lb) lb.style.display=''; btn.disabled=false; }
+    
+    // 캐시 도우미
+    const messagesEl = DOM.el('#messages');
+    
+    // ID 및 시그니처 생성
+    const Utils = {
+      generateMessageId: () => `mid-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      
+      createReactionSignature: (reactions) => {
+        if (!reactions || typeof reactions !== 'object') return '{}';
+        
+        const normalized = {};
+        Object.keys(reactions)
+          .sort((a, b) => a.localeCompare(b))
+          .forEach(key => {
+            normalized[key] = [...(reactions[key] || [])].sort();
+          });
+        return JSON.stringify(normalized);
+      },
+      
+      setButtonLoading: (button, loading) => {
+        if (!button) return;
+        
+        const spinner = button.querySelector('.spinner');
+        const label = button.querySelector('.label-txt');
+        
+        if (loading) {
+          if (spinner) spinner.style.display = 'inline-block';
+          if (label) label.style.display = 'none';
+          button.disabled = true;
+        } else {
+          if (spinner) spinner.style.display = 'none';
+          if (label) label.style.display = '';
+          button.disabled = false;
+        }
+      },
+      
+      sanitizeInput: (input, maxLength = CONFIG.MAX_MESSAGE_LENGTH) => {
+        if (typeof input !== 'string') return '';
+        return input.trim().slice(0, maxLength);
+      }
     };
 
-    /* Day/Time formatters (카톡 스타일) */
-    function ymdKey(ts){ const d=new Date(ts); return [d.getFullYear(), d.getMonth()+1, d.getDate()].join('-'); }
-    function formatDayLabel(ts){
-      const d=new Date(ts); const w=['일','월','화','수','목','금','토'][d.getDay()];
-      const mm=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
-      return `${d.getFullYear()}.${mm}.${dd} (${w})`;
-    }
-    function formatTimeLabel(ts){
-      return new Intl.DateTimeFormat('ko-KR',{hour:'numeric',minute:'2-digit',hour12:true}).format(new Date(ts));
-    }
+    /* ===== 날짜/시간 포매터 ===== */
+    const DateUtils = {
+      // 날짜 키 생성 (YYYY-M-D)
+      getDateKey: (timestamp) => {
+        const date = new Date(timestamp);
+        return [date.getFullYear(), date.getMonth() + 1, date.getDate()].join('-');
+      },
+      
+      // 날짜 라벨 포매팅 (2024.01.01 (월))
+      formatDateLabel: (timestamp) => {
+        const date = new Date(timestamp);
+        const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
+        const weekday = weekdays[date.getDay()];
+        
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        
+        return `${year}.${month}.${day} (${weekday})`;
+      },
+      
+      // 시간 라벨 포매팅 (오전 10:30)
+      formatTimeLabel: (timestamp) => {
+        return new Intl.DateTimeFormat('ko-KR', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        }).format(new Date(timestamp));
+      }
+    };
 
     /* ===== Win98 Toggle + Click Sound ===== */
     const applyTheme98 = (on)=>{
@@ -433,25 +507,48 @@
         t.classList.toggle('active', t.textContent.replace(/\s/g,'') === labelFor(currentRoom).replace(/\s/g,''));
       });
     }
-    function switchRoom(nextRoom) {
-      if (nextRoom === currentRoom) return;
-      
-      // 이전 방에서 나가기
-      socket.emit('leaveRoom', currentRoom);
-      
-      currentRoom = nextRoom;
-      messagesEl.innerHTML = '';   // 화면 초기화
-      renderedMids.clear();
-      lastTs[currentRoom] = lastTs[currentRoom] || 0;
-      lastDayRendered[currentRoom] = '';
-      drawTabs(); setActiveTabUI();
-      
-      // 새 방에 입장
-      socket.emit('joinRoom', currentRoom);
-      
-      fetchAndRender(true);
-      document.body.classList.remove('profile-open'); // 모바일 드로어 닫기
-    }
+    // ===== 방 전환 관리 =====
+    const RoomManager = {
+      switchRoom: (nextRoom) => {
+        if (nextRoom === AppState.currentRoom) return;
+        
+        // 입력 검증
+        if (!CONFIG.ROOMS.includes(nextRoom)) {
+          console.warn('잘못된 방 이름:', nextRoom);
+          return;
+        }
+        
+        try {
+          // 이전 방에서 나가기
+          socket.emit('leaveRoom', AppState.currentRoom);
+          
+          // 상태 업데이트
+          AppState.currentRoom = nextRoom;
+          
+          // UI 초기화
+          messagesEl.innerHTML = '';
+          AppState.cache.renderedMids.clear();
+          AppState.cache.lastTs[AppState.currentRoom] = AppState.cache.lastTs[AppState.currentRoom] || 0;
+          AppState.cache.lastDayRendered[AppState.currentRoom] = '';
+          
+          // UI 업데이트
+          UI.drawTabs();
+          UI.setActiveTabUI();
+          
+          // 새 방에 입장
+          socket.emit('joinRoom', AppState.currentRoom);
+          
+          // 데이터 로드 및 렌더링
+          DataManager.fetchAndRender(true);
+          
+          // 모바일 UI 정리
+          document.body.classList.remove('profile-open');
+        } catch (error) {
+          console.error('방 전환 오류:', error);
+          // 에러 시 이전 방으로 되돌리기 또는 사용자에게 알림
+        }
+      }
+    };
 
     function drawTabs(){
       const tabs = el('#tabs'); tabs.innerHTML='';
@@ -694,7 +791,7 @@
 
       const sendRoom = currentRoom;
       sending=true; setBtnLoading(el('#sendBtn'), true);
-      const mid=mkMid();
+      const mid = Utils.generateMessageId();
 
       try {
         const result = await apiCall('POST', '/api/messages', {
@@ -788,7 +885,7 @@
 
         const uploadRoom = currentRoom;
         uploading=true; el('#photoBtn').disabled=true;
-        const mid = mkMid();
+        const mid = Utils.generateMessageId();
 
         try {
           const formData = new FormData();
