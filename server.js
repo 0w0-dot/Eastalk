@@ -43,7 +43,9 @@ app.use(limiter);
 
 // 정적 파일 제공
 app.use(express.static('public'));
-app.use('/uploads', express.static('uploads'));
+// Render 배포 환경에서 올바른 업로드 경로 설정
+const uploadDir = process.env.NODE_ENV === 'production' ? '/tmp/uploads' : 'uploads';
+app.use('/uploads', express.static(uploadDir));
 
 // 🚀 Render Health Check 엔드포인트
 app.get('/health', (req, res) => {
