@@ -3,9 +3,10 @@
 ## 📊 현재 상태 (2025-08-25)
 - **서버**: Render 클라우드 플랫폼
 - **브랜치**: `develop`  
-- **최신 커밋**: `662fc40` (feat: 실시간 접속자 표시 기능 추가)
-- **배포 환경**: Node.js + MongoDB + Socket.IO
+- **최신 커밋**: `6ba49f9` (fix: Keep-Alive URL 수정 및 환경별 자동 감지 로직 개선)
+- **배포 환경**: Node.js + MongoDB + Socket.IO + Keep-Alive 시스템
 - **배포 상태**: ✅ 배포 완료
+- **Sleep 방지**: ✅ 활성화 (24/7 가동)
 
 ## 🔧 주요 기능 현황
 
@@ -38,6 +39,13 @@
    - 드래그 가능한 로그인 다이얼로그
    - 접근성 고려 (ARIA 속성, 키보드 네비게이션)
 
+6. **Keep-Alive 시스템 (Sleep 방지)** *(신규 추가 - 2025-08-25)*
+   - node-cron 기반 자동 Keep-Alive (14분 간격)
+   - 환경별 URL 자동 감지 (staging/production)
+   - 상세 로깅 및 성공률 통계 (`/api/keepalive-stats`)
+   - UptimeRobot 연동 가이드 완비
+   - **효과**: 24/7 서버 가동, 사용자 대기시간 제거
+
 ### 🔄 기술 스택
 - **Backend**: Node.js + Express.js + Socket.IO
 - **Database**: MongoDB (production) / 메모리 DB (development)
@@ -46,6 +54,18 @@
 - **Version Control**: Git + GitHub
 
 ## 📈 배포 히스토리
+
+### 2025-08-25: Keep-Alive 시스템 구현 (최신)
+- **커밋**: `6ba49f9` + `526f1e0`
+- **변경사항**:
+  - **자체 Keep-Alive**: node-cron으로 14분마다 `/health` 자가 ping
+  - **환경 감지**: staging/production URL 자동 감지 로직
+  - **모니터링**: 상세 로깅 + `/api/keepalive-stats` API
+  - **설정 가이드**: `UPTIME_ROBOT_GUIDE.md` 작성
+  - **패키지 추가**: node-cron, node-fetch
+- **목적**: Render 15분 sleep 모드 방지 → 24/7 서버 가동
+- **배포 시간**: ~4분
+- **상태**: ✅ 성공
 
 ### 2025-08-25: 실시간 접속자 기능 추가
 - **커밋**: `662fc40`
