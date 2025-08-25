@@ -7,6 +7,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const cron = require('node-cron');
 
 require('dotenv').config();
 
@@ -1046,12 +1047,125 @@ app.use('*', (req, res) => {
   res.status(404).json({ error: 'Not Found' });
 });
 
+// ===== Keep-Alive 시스템 (Render Sleep 방지) =====
+function initKeepAliveSystem() {
+  // 환경 변수에서 URL 가져오기 (기본값: Render 기본 도메인)
+  const KEEP_ALIVE_URL = process.env.KEEP_ALIVE_URL || `https://${process.env.RENDER_SERVICE_NAME || 'eastalk-web'}.onrender.com`;
+  
+  console.log('😴 Keep-Alive 시스템 활성화');
+  console.log(`🎯 Target URL: ${KEEP_ALIVE_URL}/health`);
+  
+  // 14분마다 자가 ping (15분 sleep 전에 깨우기)
+  const keepAliveJob = cron.schedule('*/14 * * * *', async () => {
+    try {
+      const fetch = (await import('node-fetch')).default;
+      const start = Date.now();
+      
+      const response = await fetch(`${KEEP_ALIVE_URL}/health`, {
+        method: 'GET',
+        timeout: 10000, // 10초 타임아웃
+        headers: {
+          'User-Agent': 'Eastalk-KeepAlive/1.0',
+          'X-Keep-Alive': 'true'
+        }
+      });
+      
+      const duration = Date.now() - start;
+      const status = response.ok ? '✅' : '❌';
+      
+      console.log(`${status} Keep-Alive Ping: ${response.status} (${duration}ms) - ${new Date().toISOString()}`);
+      
+      // 통계 업데이트
+      updateKeepAliveStats(response.ok, duration);
+      
+    } catch (error) {
+      console.log(`❌ Keep-Alive Failed: ${error.message} - ${new Date().toISOString()}`);
+      updateKeepAliveStats(false, 0);
+    }
+  });
+  
+  // 서버 시작 후 5분 뒤부터 시작 (초기화 시간 확보)
+  setTimeout(() => {
+    keepAliveJob.start();
+    console.log('🚀 Keep-Alive 스케줄러 시작됨 (14분 간격)');
+  }, 5 * 60 * 1000); // 5분 지연
+}
+
+// Keep-Alive 통계 관리
+let keepAliveStats = {
+  totalAttempts: 0,
+  successCount: 0,
+  failureCount: 0,
+  lastSuccess: null,
+  lastFailure: null,
+  averageResponseTime: 0,
+  uptimeStart: Date.now()
+};
+
+function updateKeepAliveStats(success, responseTime) {
+  keepAliveStats.totalAttempts++;
+  
+  if (success) {
+    keepAliveStats.successCount++;
+    keepAliveStats.lastSuccess = new Date().toISOString();
+    
+    // 평균 응답 시간 계산 (이동 평균)
+    if (keepAliveStats.averageResponseTime === 0) {
+      keepAliveStats.averageResponseTime = responseTime;
+    } else {
+      keepAliveStats.averageResponseTime = Math.round((keepAliveStats.averageResponseTime * 0.8) + (responseTime * 0.2));
+    }
+  } else {
+    keepAliveStats.failureCount++;
+    keepAliveStats.lastFailure = new Date().toISOString();
+  }
+}
+
+// Keep-Alive 통계 조회 API
+app.get('/api/keepalive-stats', (req, res) => {
+  const uptime = Math.floor((Date.now() - keepAliveStats.uptimeStart) / 1000);
+  const successRate = keepAliveStats.totalAttempts > 0 
+    ? Math.round((keepAliveStats.successCount / keepAliveStats.totalAttempts) * 100)
+    : 0;
+  
+  res.json({
+    ...keepAliveStats,
+    successRate: `${successRate}%`,
+    uptimeSeconds: uptime,
+    uptimeDuration: formatDuration(uptime),
+    status: keepAliveStats.failureCount === 0 || 
+            (keepAliveStats.successCount > keepAliveStats.failureCount) ? 'healthy' : 'degraded'
+  });
+});
+
+// 시간 포맷팅 헬퍼
+function formatDuration(seconds) {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${secs}s`;
+  } else if (minutes > 0) {
+    return `${minutes}m ${secs}s`;
+  } else {
+    return `${secs}s`;
+  }
+}
+
 // 🚀 Render 최적화된 서버 시작
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Eastalk 서버가 포트 ${PORT}에서 실행 중입니다.`);
   console.log(`🌍 환경: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 MongoDB: ${MONGODB_URI ? '연결됨' : '로컬 사용'}`);
   console.log(`⏰ 시작 시간: ${new Date().toISOString()}`);
+  
+  // 😴 Keep-Alive 시스템 초기화 (Sleep 방지)
+  if (isProduction) {
+    initKeepAliveSystem();
+  } else {
+    console.log('🧪 개발 모드: Keep-Alive 시스템 비활성화');
+  }
 });
 
 // 🛡️ Graceful shutdown for Render
