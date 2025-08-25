@@ -507,7 +507,7 @@
     }
     function setActiveTabUI() {
       document.querySelectorAll('.tab').forEach(t=>{
-        t.classList.toggle('active', t.textContent.replace(/\s/g,'') === labelFor(currentRoom).replace(/\s/g,''));
+        t.classList.toggle('active', t.textContent.replace(/\s/g,'') === UI.labelFor(AppState.currentRoom).replace(/\s/g,''));
       });
     }
     // ===== 방 전환 관리 =====
@@ -580,16 +580,15 @@
       isCompact: () => window.innerWidth <= 480
     };
     
+    // Legacy support for drawTabs - now uses UI.drawTabs()
     function drawTabs(){
-      UI.drawTabs();
-      ROOMS.forEach(r=>{
-        const b=document.createElement('div'); b.className='tab';
-        b.textContent = labelFor(r);
-        b.title = r; b.setAttribute('aria-label', r);
-        b.onclick=()=> switchRoom(r);
-        tabs.appendChild(b);
-      });
-      setActiveTabUI();
+      return UI.drawTabs();
+    }
+    function setActiveTabUI(){
+      return UI.setActiveTabUI();
+    }
+    function labelFor(roomName){
+      return UI.labelFor(roomName);
     }
     function initialLetter(name){ const t=String(name||'').trim(); return t? t[0].toUpperCase() : 'U'; }
 
@@ -625,15 +624,15 @@
       const counts = [];
       for (const k of Object.keys(reactions||{})){
         const arr = reactions[k]||[];
-        if (arr.length) counts.push({emoji:k, count:arr.length, mine:(arr.indexOf(userId)>=0)});
+        if (arr.length) counts.push({emoji:k, count:arr.length, mine:(arr.indexOf(AppState.userId)>=0)});
       }
-      counts.sort((a,b)=> b.count-a.count || EMOJIS.indexOf(a.emoji)-EMOJIS.indexOf(b.emoji));
+      counts.sort((a,b)=> b.count-a.count || CONFIG.EMOJIS.indexOf(a.emoji)-CONFIG.EMOJIS.indexOf(b.emoji));
       return counts;
     }
     function renderReactsHtml(m){
-      const sig = signatureOf(m.reactions||{});
+      const sig = Utils.createReactionSignature(m.reactions||{});
       const chips = reactsToCounts(m.reactions||{}).map(c=>`<span class="chip ${c.mine?'mine':''}" data-mid="${m.mid}" data-emoji="${c.emoji}">${c.emoji} ${c.count}</span>`).join('');
-      const picker = EMOJIS.map(e=>`<button class="pick" data-mid="${m.mid}" data-emoji="${e}" title="반응 추가">${e}</button>`).join('');
+      const picker = CONFIG.EMOJIS.map(e=>`<button class="pick" data-mid="${m.mid}" data-emoji="${e}" title="반응 추가">${e}</button>`).join('');
       return `<div class="reacts" id="reacts-${m.mid}" data-sig='${sig}'>
         <div class="chips">${chips}</div>
         <button class="add-react" data-mid="${m.mid}" title="반응 추가">＋</button>
@@ -658,14 +657,14 @@
       if (!node) return;
       const pickerOpen = !(node.querySelector('.picker')?.classList.contains('hidden'));
       const oldSig = node.dataset.sig || '';
-      const newSig = signatureOf(m.reactions||{});
+      const newSig = Utils.createReactionSignature(m.reactions||{});
       if (pickerOpen || oldSig === newSig) return;
       node.outerHTML = renderReactsHtml(m);
       bindReactionHandlers(m.mid);
     }
     async function reactToggle(mid, emoji){
       try {
-        const result = await apiCall('POST', '/api/reactions', { mid, userId, emoji });
+        const result = await apiCall('POST', '/api/reactions', { mid, userId: AppState.userId, emoji });
         updateReactsView(result);
         beep();
       } catch (error) {
@@ -711,22 +710,22 @@
     /* ===== Messages ===== */
     function addOrUpdateMsg(m){
       if (document.getElementById('reacts-'+(m.mid||''))){ updateReactsView(m); return; }
-      if (m.mid && renderedMids.has(m.mid)) return;
-      if (m.mid) renderedMids.add(m.mid);
+      if (m.mid && AppState.cache.renderedMids.has(m.mid)) return;
+      if (m.mid) AppState.cache.renderedMids.add(m.mid);
 
-      const dayKey = ymdKey(m.ts);
-      if (lastDayRendered[currentRoom] !== dayKey){
-        lastDayRendered[currentRoom] = dayKey;
+      const dayKey = DateUtils.getDateKey(m.ts);
+      if (AppState.cache.lastDayRendered[AppState.currentRoom] !== dayKey){
+        AppState.cache.lastDayRendered[AppState.currentRoom] = dayKey;
         const sep = document.createElement('div');
         sep.className = 'day-sep';
-        sep.innerHTML = `<span class="day-chip">${formatDayLabel(m.ts)}</span>`;
+        sep.innerHTML = `<span class="day-chip">${DateUtils.formatDateLabel(m.ts)}</span>`;
         messagesEl.appendChild(sep);
       }
 
       const stayAtBottom = (messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight) < 80;
 
       const row=document.createElement('div');
-      const isMe = (m.userId===userId);
+      const isMe = (m.userId === AppState.userId);
       row.className='msg-row '+(isMe?'me':'other');
 
       let avatarHtml='';
@@ -746,11 +745,11 @@
         const key = m.mid || m.ts;
         bubbleInner =
           `<div><img id="img-${key}" src="${m.mediaUrl}" alt="${(m.fileName||'image')}" style="max-width:100%; border-radius:12px;" /></div>
-           <div class="meta">${(m.nickname||'')} · ${formatTimeLabel(m.ts)}</div>`;
+           <div class="meta">${(m.nickname||'')} · ${DateUtils.formatTimeLabel(m.ts)}</div>`;
       } else {
         bubbleInner =
           `<div>${(m.text||'').replace(/\n/g,'<br/>')}</div>
-           <div class="meta">${(m.nickname||'')} · ${formatTimeLabel(m.ts)}</div>`;
+           <div class="meta">${(m.nickname||'')} · ${DateUtils.formatTimeLabel(m.ts)}</div>`;
       }
 
       const reactsHtml = renderReactsHtml(m);
@@ -824,54 +823,60 @@
 
     /* ===== Send / Upload ===== */
     async function sendText(){
-      if(!userId||sending) return;
-      const t=el('#text'); const v=(t.value||'').trim(); if(!v) return;
+      if(!AppState.userId || AppState.flags.sending) return;
+      const t = DOM.el('#text');
+      const v = Utils.sanitizeInput(t.value);
+      if(!v) return;
 
-      const sendRoom = currentRoom;
-      sending=true; setBtnLoading(el('#sendBtn'), true);
+      const sendRoom = AppState.currentRoom;
+      AppState.flags.sending = true;
+      Utils.setButtonLoading(DOM.el('#sendBtn'), true);
       const mid = Utils.generateMessageId();
 
       try {
         const result = await apiCall('POST', '/api/messages', {
           room: sendRoom,
-          userId,
+          userId: AppState.userId,
           text: v,
           mid
         });
         
-        sending=false; setBtnLoading(el('#sendBtn'), false); t.value='';
-        lastTs[sendRoom] = Math.max(lastTs[sendRoom]||0, result.ts||0);
-        if (currentRoom !== sendRoom) return;
+        AppState.flags.sending = false;
+        Utils.setButtonLoading(DOM.el('#sendBtn'), false);
+        t.value = '';
+        AppState.cache.lastTs[sendRoom] = Math.max(AppState.cache.lastTs[sendRoom]||0, result.ts||0);
+        if (AppState.currentRoom !== sendRoom) return;
         // 실시간으로 이미 받았을 수 있으므로 중복 체크 후 추가
-        if (!renderedMids.has(result.mid)) {
+        if (!AppState.cache.renderedMids.has(result.mid)) {
           addOrUpdateMsg(result);
         }
         beep();
       } catch (error) {
-        sending=false; setBtnLoading(el('#sendBtn'), false);
+        AppState.flags.sending = false;
+        Utils.setButtonLoading(DOM.el('#sendBtn'), false);
         alert('전송 실패: '+error.message);
       }
     }
 
     /* ===== Logout ===== */
     function doLogout(){
-      socket.emit('leaveRoom', currentRoom);
-      userId=null; me=null;
+      socket.emit('leaveRoom', AppState.currentRoom);
+      AppState.userId=null; AppState.me=null;
       messagesEl.innerHTML='';
-      renderedMids.clear();
-      Object.keys(lastTs).forEach(k=> lastTs[k]=0);
-      Object.keys(lastDayRendered).forEach(k=> lastDayRendered[k]='');
+      AppState.cache.renderedMids.clear();
+      Object.keys(AppState.cache.lastTs).forEach(k=> AppState.cache.lastTs[k]=0);
+      Object.keys(AppState.cache.lastDayRendered).forEach(k=> AppState.cache.lastDayRendered[k]='');
       setAvatar('');
-      ['nickname','status','avatar'].forEach(id=>{ const n=el('#'+id); if(n) n.value=''; });
-      const ca = el('#clearAvatar'); if (ca) ca.checked = false;
-      el('#nicknameView').textContent='User';
-      el('#statusView').textContent='상태메시지…';
-      el('#topStatus').textContent='—';
+      ['nickname','status','avatar'].forEach(id=>{ const n=DOM.el('#'+id); if(n) n.value=''; });
+      const ca = DOM.el('#clearAvatar'); if (ca) ca.checked = false;
+      DOM.el('#nicknameView').textContent='User';
+      DOM.el('#statusView').textContent='상태메시지…';
+      DOM.el('#topStatus').textContent='—';
       enableUI(false);
 
-      el('#loginName').value='';
-      el('#loginBirth').value='';
-      el('#auth').classList.remove('hidden');
+      DOM.el('#loginName').value='';
+      DOM.el('#loginBirth').value='';
+      DOM.el('#auth').classList.remove('hidden');
       document.body.classList.add('auth-open');
 
       document.body.classList.remove('profile-open');
@@ -879,30 +884,30 @@
     }
 
     function bindUI(){
-      el('#sendBtn').onclick=sendText;
-      el('#text').addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendText(); } });
+      DOM.el('#sendBtn').onclick=sendText;
+      DOM.el('#text').addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendText(); } });
 
       // 프로필 저장
-      el('#saveBtn').onclick= async ()=>{
-        if(!userId) return;
-        const nickname = el('#nickname').value;
-        const status   = el('#status').value;
-        const avValue  = (el('#avatar').value||'').trim();
-        const clearAv  = el('#clearAvatar').checked;
+      DOM.el('#saveBtn').onclick= async ()=>{
+        if(!AppState.userId) return;
+        const nickname = DOM.el('#nickname').value;
+        const status   = DOM.el('#status').value;
+        const avValue  = (DOM.el('#avatar').value||'').trim();
+        const clearAv  = DOM.el('#clearAvatar').checked;
 
         const profile = { nickname, status };
         if (clearAv) profile.clearAvatar = true;   
         if (avValue) profile.avatar = avValue;     
 
         try {
-          const u = await apiCall('PUT', `/api/profile/${userId}`, profile);
-          me = u;
-          el('#nicknameView').textContent = u.nickname || 'User';
-          el('#statusView').textContent = u.status || '상태메시지…';
-          el('#topStatus').textContent = (u.nickname || 'User') + (u.status ? ` — ${u.status}` : '');
+          const u = await apiCall('PUT', `/api/profile/${AppState.userId}`, profile);
+          AppState.me = u;
+          DOM.el('#nicknameView').textContent = u.nickname || 'User';
+          DOM.el('#statusView').textContent = u.status || '상태메시지…';
+          DOM.el('#topStatus').textContent = (u.nickname || 'User') + (u.status ? ` — ${u.status}` : '');
           setAvatar(u.avatar || '');
-          el('#avatar').value = u.avatar || '';
-          el('#clearAvatar').checked = false;
+          DOM.el('#avatar').value = u.avatar || '';
+          DOM.el('#clearAvatar').checked = false;
           beep();
         } catch (error) {
           alert('저장 실패: ' + error.message);
@@ -910,26 +915,27 @@
       };
 
       // 아바타 입력 시 "지우기" 자동 해제
-      el('#avatar').addEventListener('input', ()=>{
-        if ((el('#avatar').value||'').trim()) el('#clearAvatar').checked = false;
+      DOM.el('#avatar').addEventListener('input', ()=>{
+        if ((DOM.el('#avatar').value||'').trim()) DOM.el('#clearAvatar').checked = false;
       });
 
       // 사진 업로드
-      el('#photoBtn').onclick=()=>{ if(userId) el('#image').click(); };
-      el('#image').addEventListener('change', async ()=>{
-        const f=el('#image').files[0];
-        if(!userId||!f||uploading) return;
-        if(f.size>10*1024*1024){ alert('10MB 이하만 업로드 가능합니다.'); el('#image').value=''; return; }
+      DOM.el('#photoBtn').onclick=()=>{ if(AppState.userId) DOM.el('#image').click(); };
+      DOM.el('#image').addEventListener('change', async ()=>{
+        const f=DOM.el('#image').files[0];
+        if(!AppState.userId||!f||AppState.flags.uploading) return;
+        if(f.size>10*1024*1024){ alert('10MB 이하만 업로드 가능합니다.'); DOM.el('#image').value=''; return; }
 
-        const uploadRoom = currentRoom;
-        uploading=true; el('#photoBtn').disabled=true;
+        const uploadRoom = AppState.currentRoom;
+        AppState.flags.uploading = true;
+        DOM.el('#photoBtn').disabled = true;
         const mid = Utils.generateMessageId();
 
         try {
           const formData = new FormData();
           formData.append('image', f);
           formData.append('room', uploadRoom);
-          formData.append('userId', userId);
+          formData.append('userId', AppState.userId);
           formData.append('mid', mid);
 
           const response = await fetch('/api/upload', {
@@ -943,15 +949,19 @@
           }
 
           const result = await response.json();
-          uploading=false; el('#photoBtn').disabled=false; el('#image').value='';
-          lastTs[uploadRoom] = Math.max(lastTs[uploadRoom]||0, result.ts||0);
-          if (currentRoom !== uploadRoom) return;
-          if (!renderedMids.has(result.mid)) {
+          AppState.flags.uploading = false;
+          DOM.el('#photoBtn').disabled = false;
+          DOM.el('#image').value = '';
+          AppState.cache.lastTs[uploadRoom] = Math.max(AppState.cache.lastTs[uploadRoom]||0, result.ts||0);
+          if (AppState.currentRoom !== uploadRoom) return;
+          if (!AppState.cache.renderedMids.has(result.mid)) {
             addOrUpdateMsg(result);
           }
           beep();
         } catch (error) {
-          uploading=false; el('#photoBtn').disabled=false; el('#image').value='';
+          AppState.flags.uploading = false;
+          DOM.el('#photoBtn').disabled = false;
+          DOM.el('#image').value = '';
           alert('업로드 실패: '+error.message);
         }
       });
@@ -973,11 +983,11 @@
       makeDialogDraggable('#dialogCard','#dlgDragHandle');
 
       // 리사이즈 시 탭 라벨/상태 갱신
-      let lastCompact = isCompact();
+      let lastCompact = UI.isCompact();
       window.addEventListener('resize', ()=>{
-        const nowCompact = isCompact();
+        const nowCompact = UI.isCompact();
         if (nowCompact !== lastCompact){
-          drawTabs(); setActiveTabUI();
+          UI.drawTabs(); UI.setActiveTabUI();
           lastCompact = nowCompact;
         }
       });
@@ -985,23 +995,32 @@
 
     /* ===== Login ===== */
     async function doLogin(){
-      const card = el('#dialogCard');
-      const name=(el('#loginName').value||'').trim();
-      const b4=(el('#loginBirth').value||'').replace(/\D/g,'').slice(0,4);
-      if(!name || b4.length!==4){ card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); return; }
+      const loginBtn = DOM.el('#startBtn');
+      loginBtn.disabled = true;
+      const card = DOM.el('#dialogCard');
+      const name=(DOM.el('#loginName').value||'').trim();
+      const b4=(DOM.el('#loginBirth').value||'').replace(/\D/g,'').slice(0,4);
+      if(!name || b4.length!==4){ 
+        loginBtn.disabled = false;
+        card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); 
+        return; 
+      }
 
       try {
         const u = await apiCall('POST', '/api/login', { name, birth4: b4 });
-        userId = u.id;
-        el('#auth').classList.add('hidden'); 
+        AppState.userId = u.id;
+        DOM.el('#auth').classList.add('hidden'); 
         document.body.classList.remove('auth-open');
         enableUI(true); 
-        drawTabs(); 
+        UI.drawTabs(); 
         initMe();
-        socket.emit('joinRoom', currentRoom);
+        socket.emit('joinRoom', AppState.currentRoom);
         beep();
       } catch (error) {
+        console.error('Login error:', error);
         alert('로그인 실패: ' + error.message);
+      } finally {
+        loginBtn.disabled = false;
       }
     }
 
@@ -1017,14 +1036,14 @@
 
     // Socket.io 이벤트 핸들러
     socket.on('newMessage', (message) => {
-      if (message.room === currentRoom) {
+      if (message.room === AppState.currentRoom) {
         addOrUpdateMsg(message);
-        lastTs[currentRoom] = Math.max(lastTs[currentRoom] || 0, message.ts || 0);
+        AppState.cache.lastTs[AppState.currentRoom] = Math.max(AppState.cache.lastTs[AppState.currentRoom] || 0, message.ts || 0);
       }
     });
 
     socket.on('reactionUpdate', (message) => {
-      if (message.room === currentRoom) {
+      if (message.room === AppState.currentRoom) {
         updateReactsView(message);
       }
     });

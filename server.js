@@ -56,36 +56,48 @@ app.get('/health', (req, res) => {
   });
 });
 
-// MongoDB 연결 (Render 최적화)
+// 데이터베이스 연결 (메모리/MongoDB 지원)
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/eastalk';
+const USE_MEMORY_DB = MONGODB_URI.startsWith('memory://');
 
-mongoose.connect(MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  maxPoolSize: 10, // 연결 풀 최적화
-  serverSelectionTimeoutMS: 5000, // 빠른 타임아웃
-  socketTimeoutMS: 45000,
-})
-.then(() => {
-  console.log('✅ MongoDB 연결 성공');
+// In-Memory 데이터 저장소 (테스트용)
+let memoryUsers = new Map();
+let memoryMessages = new Map();
+let messageCounter = 1;
+
+if (USE_MEMORY_DB) {
+  console.log('🧪 테스트 모드: In-Memory 데이터베이스 사용');
   console.log(`🌍 환경: ${process.env.NODE_ENV || 'development'}`);
-})
-.catch(err => {
-  console.error('❌ MongoDB 연결 실패:', err);
-  // Render에서 재시작하도록 프로세스 종료
-  if (isProduction) {
-    process.exit(1);
-  }
-});
+} else {
+  mongoose.connect(MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+    maxPoolSize: 10,
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+  })
+  .then(() => {
+    console.log('✅ MongoDB 연결 성공');
+    console.log(`🌍 환경: ${process.env.NODE_ENV || 'development'}`);
+  })
+  .catch(err => {
+    console.error('❌ MongoDB 연결 실패:', err);
+    if (isProduction) {
+      process.exit(1);
+    }
+  });
+}
 
-// MongoDB 연결 상태 모니터링
-mongoose.connection.on('disconnected', () => {
-  console.log('⚠️ MongoDB 연결 끊김');
-});
-
-mongoose.connection.on('reconnected', () => {
-  console.log('🔄 MongoDB 재연결됨');
-});
+// MongoDB 연결 상태 모니터링 (매모리 모드가 아니면)
+if (!USE_MEMORY_DB) {
+  mongoose.connection.on('disconnected', () => {
+    console.log('⚠️ MongoDB 연결 끊김');
+  });
+  
+  mongoose.connection.on('reconnected', () => {
+    console.log('🔄 MongoDB 재연결됨');
+  });
+}
 
 // 스키마 정의
 const UserSchema = new mongoose.Schema({
@@ -112,8 +124,12 @@ const MessageSchema = new mongoose.Schema({
   reactions: { type: Object, default: {} }
 }, { timestamps: true });
 
-const User = mongoose.model('User', UserSchema);
-const Message = mongoose.model('Message', MessageSchema);
+// 데이터베이스 모델 (메모리 모드가 아니면)
+let User, Message;
+if (!USE_MEMORY_DB) {
+  User = mongoose.model('User', UserSchema);
+  Message = mongoose.model('Message', MessageSchema);
+}
 
 // 상수
 const ROOMS = ['주중', '주말', '전체', '방문예정'];
@@ -123,6 +139,67 @@ const SCAN_LIMIT = 1000;
 const normBirth4 = (x) => {
   if (x == null) return '0000';
   return String(x).replace(/\D/g, '').slice(-4).padStart(4, '0');
+};
+
+// ===== 메모리 데이터베이스 헬퍼 함수들 =====
+const MemoryDB = {
+  // 사용자 관리
+  async findUser(query) {
+    if (query.id) {
+      return memoryUsers.get(query.id) || null;
+    }
+    if (query.name && query.birth4) {
+      for (const [id, user] of memoryUsers) {
+        if (user.name === query.name && user.birth4 === query.birth4) {
+          return user;
+        }
+      }
+    }
+    return null;
+  },
+  
+  async createUser(userData) {
+    const id = userData.id || `user_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const user = { id, ...userData, createdAt: new Date(), updatedAt: new Date() };
+    memoryUsers.set(id, user);
+    return user;
+  },
+  
+  async updateUser(id, updates) {
+    const user = memoryUsers.get(id);
+    if (user) {
+      Object.assign(user, updates, { updatedAt: new Date() });
+      memoryUsers.set(id, user);
+      return user;
+    }
+    return null;
+  },
+  
+  // 메시지 관리
+  async findMessages(query) {
+    const messages = Array.from(memoryMessages.values());
+    if (query.room) {
+      return messages.filter(m => m.room === query.room).sort((a, b) => a.ts - b.ts);
+    }
+    return messages.sort((a, b) => a.ts - b.ts);
+  },
+  
+  async createMessage(messageData) {
+    const mid = messageData.mid || `msg_${messageCounter++}`;
+    const message = { mid, ...messageData, createdAt: new Date(), updatedAt: new Date() };
+    memoryMessages.set(mid, message);
+    return message;
+  },
+  
+  async updateMessage(mid, updates) {
+    const message = memoryMessages.get(mid);
+    if (message) {
+      Object.assign(message, updates, { updatedAt: new Date() });
+      memoryMessages.set(mid, message);
+      return message;
+    }
+    return null;
+  }
 };
 
 const nowIso = () => new Date().toISOString();
@@ -199,7 +276,13 @@ app.get('/', (req, res) => {
 app.get('/api/profile/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
-    const user = await User.findOne({ id: userId });
+    let user;
+    
+    if (USE_MEMORY_DB) {
+      user = await MemoryDB.findUser({ id: userId });
+    } else {
+      user = await User.findOne({ id: userId });
+    }
     
     if (user) {
       res.json({
@@ -228,21 +311,39 @@ app.post('/api/user/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     
-    let user = await User.findOne({ id: userId });
-    if (user) {
-      user.lastSeen = nowIso();
-      await user.save();
+    let user;
+    if (USE_MEMORY_DB) {
+      user = await MemoryDB.findUser({ id: userId });
+      if (user) {
+        user = await MemoryDB.updateUser(userId, { lastSeen: nowIso() });
+      } else {
+        user = await MemoryDB.createUser({
+          id: userId,
+          nickname: 'User-' + userId.slice(-5),
+          status: '',
+          avatar: '',
+          lastSeen: nowIso(),
+          name: '',
+          birth4: ''
+        });
+      }
     } else {
-      user = new User({
-        id: userId,
-        nickname: 'User-' + userId.slice(-5),
-        status: '',
-        avatar: '',
-        lastSeen: nowIso(),
-        name: '',
-        birth4: ''
-      });
-      await user.save();
+      user = await User.findOne({ id: userId });
+      if (user) {
+        user.lastSeen = nowIso();
+        await user.save();
+      } else {
+        user = new User({
+          id: userId,
+          nickname: 'User-' + userId.slice(-5),
+          status: '',
+          avatar: '',
+          lastSeen: nowIso(),
+          name: '',
+          birth4: ''
+        });
+        await user.save();
+      }
     }
     
     res.json({
@@ -331,29 +432,48 @@ app.post('/api/login', async (req, res) => {
       });
     }
     
-    // 기존 사용자 찾기
-    const users = await User.find({
-      name: { $regex: new RegExp('^' + nm + '$', 'i') },
-      birth4: b4
-    }).sort({ lastSeen: -1 });
-    
     let user;
-    if (users.length > 0) {
-      user = users[0];
-      user.lastSeen = nowIso();
-      await user.save();
+    if (USE_MEMORY_DB) {
+      // 메모리 데이터베이스에서 기존 사용자 찾기
+      user = await MemoryDB.findUser({ name: nm, birth4: b4 });
+      if (user) {
+        user = await MemoryDB.updateUser(user.id, { lastSeen: nowIso() });
+      } else {
+        const userIdNew = 'uid-' + uuidv4().replace(/-/g, '').slice(-12);
+        user = await MemoryDB.createUser({
+          id: userIdNew,
+          nickname: nm,
+          status: '',
+          avatar: '',
+          lastSeen: nowIso(),
+          name: nm,
+          birth4: b4
+        });
+      }
     } else {
-      const userIdNew = 'uid-' + uuidv4().replace(/-/g, '').slice(-12);
-      user = new User({
-        id: userIdNew,
-        nickname: nm,
-        status: '',
-        avatar: '',
-        lastSeen: nowIso(),
-        name: nm,
+      // MongoDB에서 기존 사용자 찾기
+      const users = await User.find({
+        name: { $regex: new RegExp('^' + nm + '$', 'i') },
         birth4: b4
-      });
-      await user.save();
+      }).sort({ lastSeen: -1 });
+      
+      if (users.length > 0) {
+        user = users[0];
+        user.lastSeen = nowIso();
+        await user.save();
+      } else {
+        const userIdNew = 'uid-' + uuidv4().replace(/-/g, '').slice(-12);
+        user = new User({
+          id: userIdNew,
+          nickname: nm,
+          status: '',
+          avatar: '',
+          lastSeen: nowIso(),
+          name: nm,
+          birth4: b4
+        });
+        await user.save();
+      }
     }
     
     res.json({
@@ -391,11 +511,22 @@ app.post('/api/messages', async (req, res) => {
     
     // 중복 메시지 체크
     if (mid) {
-      const existingMsg = await Message.findOne({ mid });
+      let existingMsg;
+      if (USE_MEMORY_DB) {
+        existingMsg = memoryMessages.get(mid);
+      } else {
+        existingMsg = await Message.findOne({ mid });
+      }
+      
       if (existingMsg) {
-        const user = await User.findOne({ id: existingMsg.userId });
+        let user;
+        if (USE_MEMORY_DB) {
+          user = memoryUsers.get(existingMsg.userId);
+        } else {
+          user = await User.findOne({ id: existingMsg.userId });
+        }
         return res.json({
-          ...existingMsg.toObject(),
+          ...(USE_MEMORY_DB ? existingMsg : existingMsg.toObject()),
           avatar: user ? user.avatar : ''
         });
       }
@@ -409,11 +540,16 @@ app.post('/api/messages', async (req, res) => {
       });
     }
     
-    const user = await User.findOne({ id: userId });
+    let user;
+    if (USE_MEMORY_DB) {
+      user = memoryUsers.get(userId);
+    } else {
+      user = await User.findOne({ id: userId });
+    }
     const nickname = user ? user.nickname : ('User-' + userId.slice(-5));
     
     const ts = Date.now();
-    const message = new Message({
+    const messageData = {
       ts,
       room,
       userId,
@@ -425,9 +561,15 @@ app.post('/api/messages', async (req, res) => {
       fileName: '',
       mid: mid || uuidv4(),
       reactions: {}
-    });
+    };
     
-    await message.save();
+    let message;
+    if (USE_MEMORY_DB) {
+      message = await MemoryDB.createMessage(messageData);
+    } else {
+      message = new Message(messageData);
+      await message.save();
+    }
     
     const result = {
       ts: message.ts,
@@ -460,27 +602,39 @@ app.get('/api/messages/:room', async (req, res) => {
       return res.status(400).json({ error: 'Invalid room' });
     }
     
-    let query = { room };
-    if (since) {
-      query.ts = { $gt: Number(since) };
+    let messages;
+    if (USE_MEMORY_DB) {
+      const allMessages = await MemoryDB.findMessages({ room });
+      const sinceNum = since ? Number(since) : 0;
+      messages = allMessages.filter(m => m.ts > sinceNum).slice(-50);
+    } else {
+      let query = { room };
+      if (since) {
+        query.ts = { $gt: Number(since) };
+      }
+      
+      const foundMessages = await Message.find(query)
+        .sort({ ts: -1 })
+        .limit(SCAN_LIMIT);
+      
+      // 최근 50개만 가져오기
+      messages = foundMessages.reverse().slice(-50);
     }
     
-    const messages = await Message.find(query)
-      .sort({ ts: -1 })
-      .limit(SCAN_LIMIT);
-    
-    // 최근 50개만 가져오기
-    const recentMessages = messages.reverse().slice(-50);
-    
     // 사용자 정보와 합치기
-    const userIds = [...new Set(recentMessages.map(m => m.userId))];
-    const users = await User.find({ id: { $in: userIds } });
+    const userIds = [...new Set(messages.map(m => m.userId))];
+    let users;
+    if (USE_MEMORY_DB) {
+      users = Array.from(memoryUsers.values()).filter(u => userIds.includes(u.id));
+    } else {
+      users = await User.find({ id: { $in: userIds } });
+    }
     const userMap = {};
     users.forEach(u => {
       userMap[u.id] = { nickname: u.nickname, avatar: u.avatar };
     });
     
-    const result = recentMessages.map(m => ({
+    const result = messages.map(m => ({
       ts: m.ts,
       room: m.room,
       userId: m.userId,
@@ -507,16 +661,36 @@ app.post('/api/upload', upload.single('image'), async (req, res) => {
   try {
     const { room, userId, mid } = req.body;
     
+    // 입력 검증 추가
+    if (!isValidUserId(userId)) {
+      return res.status(400).json({ error: '유효하지 않은 사용자 ID입니다.' });
+    }
+    
     if (!ROOMS.includes(room)) {
       return res.status(400).json({ error: 'Invalid room' });
     }
     
+    if (!mid || typeof mid !== 'string') {
+      return res.status(400).json({ error: '유효하지 않은 메시지 ID입니다.' });
+    }
+    
     // 중복 메시지 체크
-    const existingMsg = await Message.findOne({ mid });
+    let existingMsg;
+    if (USE_MEMORY_DB) {
+      existingMsg = memoryMessages.get(mid);
+    } else {
+      existingMsg = await Message.findOne({ mid });
+    }
+    
     if (existingMsg) {
-      const user = await User.findOne({ id: existingMsg.userId });
+      let user;
+      if (USE_MEMORY_DB) {
+        user = memoryUsers.get(existingMsg.userId);
+      } else {
+        user = await User.findOne({ id: existingMsg.userId });
+      }
       return res.json({
-        ...existingMsg.toObject(),
+        ...(USE_MEMORY_DB ? existingMsg : existingMsg.toObject()),
         avatar: user ? user.avatar : ''
       });
     }
@@ -525,14 +699,19 @@ app.post('/api/upload', upload.single('image'), async (req, res) => {
       return res.status(400).json({ error: '이미지가 없습니다.' });
     }
     
-    const user = await User.findOne({ id: userId });
+    let user;
+    if (USE_MEMORY_DB) {
+      user = memoryUsers.get(userId);
+    } else {
+      user = await User.findOne({ id: userId });
+    }
     const nickname = user ? user.nickname : ('User-' + userId.slice(-5));
     
     // Render에서는 /uploads 경로로 직접 제공
     const mediaUrl = `/uploads/${req.file.filename}`;
     const ts = Date.now();
     
-    const message = new Message({
+    const messageData = {
       ts,
       room,
       userId,
@@ -544,9 +723,15 @@ app.post('/api/upload', upload.single('image'), async (req, res) => {
       fileName: req.file.originalname,
       mid: mid || uuidv4(),
       reactions: {}
-    });
+    };
     
-    await message.save();
+    let message;
+    if (USE_MEMORY_DB) {
+      message = await MemoryDB.createMessage(messageData);
+    } else {
+      message = new Message(messageData);
+      await message.save();
+    }
     
     const result = {
       ts: message.ts,
@@ -577,9 +762,30 @@ app.post('/api/reactions', async (req, res) => {
   try {
     const { mid, userId, emoji } = req.body;
     
-    const message = await Message.findOne({ mid });
-    if (!message) {
-      return res.status(404).json({ error: '메시지를 찾을 수 없습니다.' });
+    // 입력 검증 추가
+    if (!isValidUserId(userId)) {
+      return res.status(400).json({ error: '유효하지 않은 사용자 ID입니다.' });
+    }
+    
+    if (!mid || typeof mid !== 'string') {
+      return res.status(400).json({ error: '유효하지 않은 메시지 ID입니다.' });
+    }
+    
+    if (!emoji || typeof emoji !== 'string') {
+      return res.status(400).json({ error: '유효하지 않은 이모지입니다.' });
+    }
+    
+    let message;
+    if (USE_MEMORY_DB) {
+      message = memoryMessages.get(mid);
+      if (!message) {
+        return res.status(404).json({ error: '메시지를 찾을 수 없습니다.' });
+      }
+    } else {
+      message = await Message.findOne({ mid });
+      if (!message) {
+        return res.status(404).json({ error: '메시지를 찾을 수 없습니다.' });
+      }
     }
     
     const reactions = message.reactions || {};
@@ -594,9 +800,20 @@ app.post('/api/reactions', async (req, res) => {
     
     reactions[emoji] = arr;
     message.reactions = reactions;
-    await message.save();
     
-    const user = await User.findOne({ id: message.userId });
+    if (USE_MEMORY_DB) {
+      memoryMessages.set(mid, message);
+    } else {
+      await message.save();
+    }
+    
+    let user;
+    if (USE_MEMORY_DB) {
+      user = memoryUsers.get(message.userId);
+    } else {
+      user = await User.findOne({ id: message.userId });
+    }
+    
     const result = {
       ts: message.ts,
       room: message.room,
