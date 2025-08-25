@@ -535,7 +535,8 @@
           
           // UI 초기화
           messagesEl.innerHTML = '';
-          // 방별 렌더링된 메시지 ID는 유지 (지우지 않음)
+          // 방 전환 시 해당 방의 렌더링된 메시지 ID 초기화 (전체 메시지 다시 로드를 위해)
+          AppState.cache.renderedMids[AppState.currentRoom].clear();
           AppState.cache.lastTs[AppState.currentRoom] = AppState.cache.lastTs[AppState.currentRoom] || 0;
           AppState.cache.lastDayRendered[AppState.currentRoom] = '';
           
