@@ -668,7 +668,6 @@ app.post('/api/messages', async (req, res) => {
     let threadId = null;
     let replyToNickname = null;
     if (replyTo) {
-      console.log('🔍 [DEBUG] Reply processing - replyTo:', replyTo);
       let parentMessage;
       if (USE_MEMORY_DB) {
         parentMessage = memoryMessages.get(replyTo);
@@ -676,14 +675,11 @@ app.post('/api/messages', async (req, res) => {
         parentMessage = await Message.findOne({ mid: replyTo });
       }
       
-      console.log('🔍 [DEBUG] Parent message found:', parentMessage ? 'YES' : 'NO');
       if (parentMessage) {
-        console.log('🔍 [DEBUG] Parent nickname:', parentMessage.nickname);
         // 부모 메시지에 thread가 있으면 사용, 없으면 부모 메시지 ID를 thread로 설정
         threadId = parentMessage.thread || parentMessage.mid;
         // 답글 대상의 닉네임 저장
         replyToNickname = parentMessage.nickname;
-        console.log('🔍 [DEBUG] Set replyToNickname to:', replyToNickname);
       }
     }
     
@@ -726,8 +722,6 @@ app.post('/api/messages', async (req, res) => {
       replyToNickname: message.replyToNickname,
       thread: message.thread
     };
-    
-    console.log('🔍 [DEBUG] Final result.replyToNickname:', result.replyToNickname);
     
     // Socket.io로 실시간 전송
     io.to(room).emit('newMessage', result);
