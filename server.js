@@ -666,6 +666,7 @@ app.post('/api/messages', async (req, res) => {
     
     // 🔗 답글 처리 로직
     let threadId = null;
+    let replyToNickname = null;
     if (replyTo) {
       let parentMessage;
       if (USE_MEMORY_DB) {
@@ -677,6 +678,8 @@ app.post('/api/messages', async (req, res) => {
       if (parentMessage) {
         // 부모 메시지에 thread가 있으면 사용, 없으면 부모 메시지 ID를 thread로 설정
         threadId = parentMessage.thread || parentMessage.mid;
+        // 답글 대상의 닉네임 저장
+        replyToNickname = parentMessage.nickname;
       }
     }
     
@@ -693,6 +696,7 @@ app.post('/api/messages', async (req, res) => {
       mid: mid || uuidv4(),
       reactions: {},
       replyTo: replyTo || null,
+      replyToNickname: replyToNickname,
       thread: threadId
     };
     
@@ -715,6 +719,7 @@ app.post('/api/messages', async (req, res) => {
       avatar: user ? user.avatar : '',
       reactions: message.reactions,
       replyTo: message.replyTo,
+      replyToNickname: message.replyToNickname,
       thread: message.thread
     };
     
@@ -843,7 +848,10 @@ app.get('/api/messages/:room', async (req, res) => {
       fileName: m.fileName,
       mid: m.mid,
       avatar: userMap[m.userId] ? userMap[m.userId].avatar : '',
-      reactions: m.reactions
+      reactions: m.reactions,
+      replyTo: m.replyTo,
+      replyToNickname: m.replyToNickname,
+      thread: m.thread
     }));
     
     // 페이징 메타데이터와 함께 응답

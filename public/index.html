@@ -759,6 +759,7 @@
       // 🔔 알림 시스템 상태
       notifications: {
         permission: 'default', // 'granted', 'denied', 'default'
+        permissionRequested: false, // 권한 요청 여부 추적
         // 소리 설정 제거됨 - 기본값만 사용 (ding, 70% 볼륨)
         state: {
           isTabVisible: true,   // Page Visibility API 상태
@@ -1435,6 +1436,30 @@
     socket.on('connect', () => {
       console.log('✅ Socket.IO 연결됨 - Keep-Alive 자동 활성화');
       SmartHeartbeat.start();
+      
+      // 🔔 앱 시작 시 알림 시스템 자동 초기화
+      setTimeout(async () => {
+        console.log('🔔 알림 시스템 초기화 시작...');
+        
+        // 기본 설정 로드
+        notificationManager.loadSettings();
+        
+        // 기본 사운드 초기화
+        await notificationManager.initializeAudio();
+        
+        // 브라우저 알림 권한 자동 요청 (사용자 인터랙션 시)
+        if (Notification.permission === 'default') {
+          console.log('🔔 알림 권한이 아직 요청되지 않음 - 사용자 상호작용 시 요청');
+        } else if (Notification.permission === 'granted') {
+          // 권한이 이미 허용된 경우 Push 알림 초기화
+          console.log('🔔 알림 권한 허용됨 - Push 시스템 초기화');
+          notificationManager.initializePush();
+        } else {
+          console.log('🔔 알림 권한 거부됨 - 기본 기능만 사용');
+        }
+        
+        console.log('✅ 알림 시스템 초기화 완료');
+      }, 1000);
     });
     
     socket.on('disconnect', (reason) => {
@@ -2182,7 +2207,7 @@
       let replyTargetHtml = '';
       if (m.replyTo) {
         // 답글인 경우 원본 메시지 정보 표시
-        replyTargetHtml = `<div class="reply-target">↳ ${m.nickname || 'User'}님에게 답글</div>`;
+        replyTargetHtml = `<div class="reply-target">↳ ${m.replyToNickname || 'User'}님에게 답글</div>`;
         row.classList.add('reply');
         // 스레드 연결선 표시
         if (!isMe) {
@@ -2456,6 +2481,22 @@
       const t = DOM.el('#text');
       const v = Utils.sanitizeInput(t.value);
       if(!v) return;
+
+      // 🔔 첫 메시지 전송 시 알림 권한 자동 요청
+      if (Notification.permission === 'default' && !AppState.notifications.permissionRequested) {
+        console.log('🔔 첫 메시지 전송 - 알림 권한 요청');
+        AppState.notifications.permissionRequested = true;
+        
+        try {
+          const permission = await notificationManager.requestPermission();
+          if (permission === 'granted') {
+            console.log('✅ 알림 권한 허용됨 - Push 시스템 초기화');
+            notificationManager.initializePush();
+          }
+        } catch (error) {
+          console.warn('⚠️ 알림 권한 요청 실패:', error);
+        }
+      }
 
       const sendRoom = AppState.currentRoom;
       AppState.flags.sending = true;
