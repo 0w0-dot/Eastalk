@@ -632,8 +632,8 @@ app.post('/api/messages', async (req, res) => {
       reactions: message.reactions
     };
     
-    // Socket.io로 실시간 전송 (성능 최적화: 텍스트 메시지는 binary scan 생략)
-    io.binary(false).to(room).emit('newMessage', result);
+    // Socket.io로 실시간 전송
+    io.to(room).emit('newMessage', result);
     
     res.json(result);
   } catch (error) {
@@ -947,8 +947,8 @@ app.post('/api/reactions', async (req, res) => {
       reactions: message.reactions
     };
     
-    // Socket.io로 실시간 전송 (성능 최적화: 반응 데이터는 binary scan 생략)
-    io.binary(false).to(message.room).emit('reactionUpdate', result);
+    // Socket.io로 실시간 전송
+    io.to(message.room).emit('reactionUpdate', result);
     
     res.json(result);
   } catch (error) {

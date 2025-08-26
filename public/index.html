@@ -349,6 +349,100 @@
       body.win98 .btn-icon{ width:24px; }
       body.win98 .input{ height:22px; }
     }
+
+    /* ===== 로딩 및 스켈레톤 UI ===== */
+    .loading-skeleton {
+      padding: 20px;
+      text-align: center;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    
+    .loading-skeleton::before {
+      content: '';
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--line);
+      border-top: 2px solid var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    .message-skeleton {
+      padding: 12px 16px;
+      display: flex;
+      gap: 12px;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    .message-skeleton-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--line);
+    }
+
+    .message-skeleton-content {
+      flex: 1;
+    }
+
+    .message-skeleton-name {
+      width: 80px;
+      height: 14px;
+      background: var(--line);
+      border-radius: 4px;
+      margin-bottom: 6px;
+    }
+
+    .message-skeleton-text {
+      width: 200px;
+      height: 16px;
+      background: var(--line);
+      border-radius: 4px;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* 부드러운 전환 애니메이션 */
+    .tab {
+      transition: all 0.2s ease;
+      transform: scale(1);
+    }
+
+    .tab:active {
+      transform: scale(0.98);
+    }
+
+    .tab.active {
+      transform: scale(1);
+      box-shadow: 0 2px 8px rgba(255, 212, 0, 0.3);
+    }
+
+    /* 🚀 이미지 지연 로딩 스타일 */
+    .lazy-image {
+      transition: opacity 0.3s ease;
+      opacity: 0.7;
+    }
+
+    .lazy-image.loaded {
+      opacity: 1;
+    }
+
+    .lazy-image.loading {
+      opacity: 0.5;
+    }
   </style>
   <script src="/socket.io/socket.io.js"></script>
 </head>
@@ -484,9 +578,17 @@
           '방문예정': new Set() 
         },
         lastTs: { '주중': 0, '주말': 0, '전체': 0, '방문예정': 0 },
-        lastDayRendered: { '주중': '', '주말': '', '전체': '', '방문예정': '' }
+        lastDayRendered: { '주중': '', '주말': '', '전체': '', '방문예정': '' },
+        pagination: {},
+        preloadedMessages: {}  // 🚀 프리로드된 메시지 캐시
       },
-      connectedUsers: [] // 현재 접속자 목록
+      connectedUsers: [], // 현재 접속자 목록
+      // 🚀 방 방문 통계 및 프리로딩 설정
+      roomStats: {
+        visitCount: { '주중': 0, '주말': 0, '전체': 0, '방문예정': 0 },
+        lastVisit: { '주중': 0, '주말': 0, '전체': 0, '방문예정': 0 },
+        preloadThreshold: 3  // 3번 이상 방문한 방은 프리로드 대상
+      }
     };
 
     // Socket.io 연결 (지능형 Keep-Alive 설정)
@@ -774,37 +876,51 @@
         try {
           console.log(`[ROOM] 방 전환 시작: ${AppState.currentRoom} → ${nextRoom}`);
           
+          // 🚀 즉시 UI 피드백 - 탭 상태를 먼저 업데이트
+          const prevRoom = AppState.currentRoom;
+          AppState.currentRoom = nextRoom;
+          UI.drawTabs();
+          UI.setActiveTabUI();
+          
           // 방 전환 시작
           AppState.flags.switching = true;
           
           // 1. 이전 방에서 완전 이탈
-          socket.emit('leaveRoom', AppState.currentRoom);
+          socket.emit('leaveRoom', prevRoom);
           
-          // 2. 상태 업데이트 및 UI 초기화
-          const prevRoom = AppState.currentRoom;
-          AppState.currentRoom = nextRoom;
-          messagesEl.innerHTML = '';
+          // 2. UI 초기화 - 채팅 영역 클리어 및 로딩 표시
+          messagesEl.innerHTML = '<div class="loading-skeleton">메시지를 불러오는 중...</div>';
           
           // 3. 캐시 초기화 (해당 방의 렌더링된 메시지 ID 초기화)
           AppState.cache.renderedMids[AppState.currentRoom].clear();
           AppState.cache.lastTs[AppState.currentRoom] = AppState.cache.lastTs[AppState.currentRoom] || 0;
           AppState.cache.lastDayRendered[AppState.currentRoom] = '';
           
-          // 4. UI 업데이트
-          UI.drawTabs();
-          UI.setActiveTabUI();
-          
-          // 5. 새 방에 입장
+          // 4. 새 방에 입장
           socket.emit('joinRoom', AppState.currentRoom);
           
-          // 6. 데이터 로드 및 렌더링 (전체 메시지 다시 로드)
+          // 6. 🚀 프리로드 체크 및 데이터 로드
           setTimeout(() => {
-            DataManager.fetchAndRender(true, true).finally(() => {
-              // 방 전환 완료
-              AppState.flags.switching = false;
-              MessageManager.onRoomSwitch();
-              console.log(`[ROOM] 방 전환 완료: ${prevRoom} → ${nextRoom}`);
-            });
+            // 프리로드된 메시지가 있으면 즉시 사용
+            const usedPreload = PreloadManager.usePreloadedIfAvailable(AppState.currentRoom);
+            
+            if (usedPreload) {
+              // 프리로드된 메시지로 즉시 렌더링 후 최신 메시지만 추가 로드
+              DataManager.fetchAndRender(true, false).finally(() => {
+                AppState.flags.switching = false;
+                MessageManager.onRoomSwitch();
+                PreloadManager.updateRoomStats(AppState.currentRoom);
+                console.log(`[ROOM] 방 전환 완료 (프리로드 사용): ${prevRoom} → ${nextRoom}`);
+              });
+            } else {
+              // 일반적인 전체 로드
+              DataManager.fetchAndRender(true, true).finally(() => {
+                AppState.flags.switching = false;
+                MessageManager.onRoomSwitch();
+                PreloadManager.updateRoomStats(AppState.currentRoom);
+                console.log(`[ROOM] 방 전환 완료: ${prevRoom} → ${nextRoom}`);
+              });
+            }
           }, 100); // Socket 이벤트 처리 시간 확보
           
           // 모바일 UI 정리
@@ -812,6 +928,110 @@
         } catch (error) {
           console.error('방 전환 오류:', error);
           // 에러 시 이전 방으로 되돌리기 또는 사용자에게 알림
+        }
+      }
+    };
+
+    // 🚀 백그라운드 프리로딩 매니저
+    const PreloadManager = {
+      // 방 방문 통계 업데이트
+      updateRoomStats: (roomName) => {
+        AppState.roomStats.visitCount[roomName] = (AppState.roomStats.visitCount[roomName] || 0) + 1;
+        AppState.roomStats.lastVisit[roomName] = Date.now();
+        
+        // 자주 방문하는 방들의 메시지 백그라운드 프리로드
+        setTimeout(() => PreloadManager.preloadFrequentRooms(), 2000);
+      },
+      
+      // 자주 방문하는 방들 백그라운드 프리로드
+      preloadFrequentRooms: async () => {
+        if (!AppState.userId) return;
+        
+        const frequentRooms = CONFIG.ROOMS.filter(room => {
+          const visitCount = AppState.roomStats.visitCount[room] || 0;
+          return visitCount >= AppState.roomStats.preloadThreshold && room !== AppState.currentRoom;
+        });
+        
+        for (const room of frequentRooms) {
+          // 이미 프리로드됐거나 최근에 방문한 방은 스킵
+          const lastPreload = AppState.cache.preloadedMessages[room]?.timestamp || 0;
+          if (Date.now() - lastPreload < 5 * 60 * 1000) continue; // 5분 쿨다운
+          
+          try {
+            console.log(`[PRELOAD] 백그라운드 프리로딩: ${room}`);
+            const response = await apiCall('GET', `/api/messages/${room}?limit=20`);
+            const messages = response?.messages || response || [];
+            
+            AppState.cache.preloadedMessages[room] = {
+              messages: messages,
+              timestamp: Date.now()
+            };
+          } catch (error) {
+            console.warn(`방 ${room} 프리로드 실패:`, error);
+          }
+        }
+      },
+      
+      // 프리로드된 메시지가 있으면 즉시 렌더링
+      usePreloadedIfAvailable: (roomName) => {
+        const preloaded = AppState.cache.preloadedMessages[roomName];
+        if (preloaded && Date.now() - preloaded.timestamp < 10 * 60 * 1000) { // 10분 유효
+          console.log(`[PRELOAD] 프리로드된 메시지 사용: ${roomName}`);
+          preloaded.messages.forEach(addOrUpdateMsg);
+          return true;
+        }
+        return false;
+      }
+    };
+
+    // 🚀 이미지 지연 로딩 매니저
+    const LazyImageManager = {
+      observer: null,
+      
+      init: () => {
+        if ('IntersectionObserver' in window) {
+          LazyImageManager.observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+              if (entry.isIntersecting) {
+                const img = entry.target;
+                LazyImageManager.loadImage(img);
+                LazyImageManager.observer.unobserve(img);
+              }
+            });
+          }, {
+            rootMargin: '50px', // 이미지가 화면에 보이기 50px 전부터 로딩 시작
+            threshold: 0.01
+          });
+        }
+      },
+      
+      loadImage: (img) => {
+        const dataSrc = img.getAttribute('data-src');
+        if (dataSrc) {
+          img.classList.add('loading');
+          
+          // 새로운 이미지 객체를 만들어 미리 로딩
+          const imageLoader = new Image();
+          imageLoader.onload = () => {
+            img.src = dataSrc;
+            img.classList.remove('loading');
+            img.classList.add('loaded');
+            img.removeAttribute('data-src');
+          };
+          imageLoader.onerror = () => {
+            img.classList.remove('loading');
+            img.alt = '이미지 로딩 실패';
+            img.style.filter = 'grayscale(1)';
+          };
+          imageLoader.src = dataSrc;
+        }
+      },
+      
+      observeImages: () => {
+        if (LazyImageManager.observer) {
+          document.querySelectorAll('.lazy-image:not(.loaded):not(.loading)').forEach(img => {
+            LazyImageManager.observer.observe(img);
+          });
         }
       }
     };
@@ -1087,8 +1307,9 @@
       let bubbleInner='';
       if (m.kind==='image' && m.mediaUrl){
         const key = m.mid || m.ts;
+        // 🚀 이미지 지연 로딩 구현
         bubbleInner =
-          `<div><img id="img-${key}" src="${m.mediaUrl}" alt="${(m.fileName||'image')}" style="max-width:100%; border-radius:12px;" /></div>
+          `<div><img id="img-${key}" class="lazy-image" data-src="${m.mediaUrl}" src="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='200'%20height='100'%3E%3Crect%20fill='%23f3f4f6'%20width='200'%20height='100'/%3E%3Ctext%20fill='%23a3a3a3'%20x='50%25'%20y='50%25'%20text-anchor='middle'%20dy='.3em'%20font-size='12'%3E이미지 로딩 중...%3C/text%3E%3C/svg%3E" alt="${(m.fileName||'image')}" style="max-width:100%; border-radius:12px;" /></div>
            <div class="meta">${(m.nickname||'')} · ${DateUtils.formatTimeLabel(m.ts)}</div>`;
       } else {
         bubbleInner =
@@ -1124,6 +1345,9 @@
       }
 
       if (stayAtBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
+      
+      // 🚀 새로 추가된 이미지 관찰 등록
+      LazyImageManager.observeImages();
     }
 
     /* ===== 데이터 관리 ===== */
@@ -1169,6 +1393,9 @@
             const newScrollHeight = messagesEl.scrollHeight;
             messagesEl.scrollTop = oldScrollTop + (newScrollHeight - oldScrollHeight);
             
+            // 🚀 새로 로드된 과거 이미지들 관찰 등록
+            LazyImageManager.observeImages();
+            
             console.log(`과거 메시지 ${messages.length}개 로드 완료`);
             return true;
           }
@@ -1192,6 +1419,14 @@
           const hasMore = response?.hasMore || false;
           const oldestTs = response?.oldestTimestamp || null;
           
+          // 🚀 로딩 스켈레톤 제거
+          if (fullReload) {
+            const loadingSkeleton = messagesEl.querySelector('.loading-skeleton');
+            if (loadingSkeleton) {
+              messagesEl.removeChild(loadingSkeleton);
+            }
+          }
+          
           if(messages && messages.length){
             messages.forEach(addOrUpdateMsg);
             AppState.cache.lastTs[AppState.currentRoom] = Math.max(AppState.cache.lastTs[AppState.currentRoom]||0, messages[messages.length-1].ts||0);
@@ -1208,6 +1443,9 @@
           
           // 더 보기 버튼 상태 업데이트
           MessageManager.updateLoadMoreButton();
+          
+          // 🚀 새로 로드된 이미지들 관찰 등록
+          LazyImageManager.observeImages();
           
           const t = new Date().toLocaleTimeString();
           DOM.el('#topStatus').textContent = `연결됨 · ${t}`;
@@ -1317,6 +1555,10 @@
         DOM.el('#topStatus').textContent = (u.nickname || 'User') + (u.status ? ` — ${u.status}` : '');
         setAvatar(u.avatar || '');
         UI.drawTabs();
+        
+        // 🚀 이미지 지연 로딩 시스템 초기화
+        LazyImageManager.init();
+        
         DataManager.fetchAndRender(true);
       } catch (error) {
         console.error('사용자 정보 로드 실패:', error);
