@@ -58,3 +58,72 @@ render*.yaml
 
 # Documentation files (not needed for server operation)
 *.md
+
+# ================================================================
+# 🤖 CLAUDE CODE AUTO-GITIGNORE GUIDELINES
+# ================================================================
+# 서버 운영에 영향을 주지 않는 파일들을 자동으로 .gitignore에 추가
+# 
+# 📋 SERVER OPERATION ESSENTIALS (절대 제거하면 안 되는 파일들):
+# - server.js (메인 서버 애플리케이션)
+# - package.json, package-lock.json (의존성 관리)
+# - public/index.html (프론트엔드 메인 파일)
+# - public/* (정적 자산들)
+# - .env.example (환경 변수 템플릿)
+# - .gitignore (Git 설정)
+#
+# 🗑️ AUTO-EXCLUDE PATTERNS (자동으로 .gitignore 추가 대상):
+# 
+# 1. Documentation & Guides:
+#    - *.md (모든 마크다운 문서)
+#    - docs/, documentation/ (문서 디렉토리)
+#    - README*, CHANGELOG*, LICENSE* (프로젝트 문서)
+#    - *_GUIDE.md, *_MANUAL.md (가이드 문서)
+#
+# 2. Development & Testing Files:
+#    - test/, tests/, __tests__/ (테스트 디렉토리)
+#    - coverage/ (테스트 커버리지)
+#    - .nyc_output/ (NYC 커버리지)
+#    - *.test.js, *.spec.js (테스트 파일)
+#    - jest.config.js, mocha.opts (테스트 설정)
+#
+# 3. Configuration & Scripts:
+#    - scripts/ (빌드/배포 스크립트)
+#    - .github/ (GitHub Actions/워크플로우)
+#    - docker-compose*.yml (Docker 개발용)
+#    - Dockerfile.dev, Dockerfile.local (개발용 Docker)
+#    - nodemon.json (개발 서버 설정)
+#    - .eslintrc*, .prettierrc* (코드 스타일링)
+#
+# 4. Deployment & CI/CD:
+#    - deploy/, deployment/ (배포 스크립트)
+#    - .circleci/, .travis.yml, .gitlab-ci.yml (CI/CD)
+#    - render*.yaml, vercel.json, netlify.toml (배포 설정)
+#    - Procfile.dev (개발용 Procfile)
+#
+# 5. Temporary & Cache Files:
+#    - tmp/, temp/, .tmp/ (임시 파일)
+#    - cache/, .cache/ (캐시 디렉토리)
+#    - *.tmp, *.temp (임시 파일)
+#    - .DS_Store, Thumbs.db (OS 생성 파일)
+#
+# 6. Development Tools:
+#    - .vscode/, .idea/ (IDE 설정)
+#    - browser-state-* (MCP Playwright 상태)
+#    - *.swp, *.swo (Vim 임시 파일)
+#    - .claude/ (Claude Code 설정)
+#
+# 🔍 IDENTIFICATION RULES:
+# - 파일명에 'dev', 'test', 'doc', 'guide', 'manual' 포함
+# - 설정 파일 중 '.local', '.dev', '.development' 접미사
+# - 임시 파일 패턴: *.tmp, *.temp, *.bak, *.backup
+# - IDE/에디터 설정 파일들
+# - 배포 설정 중 개발/스테이징용 (*.dev.*, *.staging.*)
+#
+# 💡 USAGE FOR CLAUDE:
+# 새 파일 생성/발견 시 위 패턴과 매칭하여 자동으로 .gitignore 추가
+# 서버 운영 필수 파일 목록과 비교하여 안전성 확인 후 추가
+# ================================================================
+
+# 🔄 Current project specific excludes (based on auto-detection)
+# Added automatically when found in workspace:
