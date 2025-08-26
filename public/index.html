@@ -788,12 +788,107 @@
       pingTimeout: 20000    // 20초 응답 타임아웃
     });
 
+    /* ===== 🔔 NotificationQueue 클래스 ===== */
+    class NotificationQueue {
+      constructor() {
+        this.activeNotifications = new Map();
+        this.maxNotifications = 3; // 최대 동시 표시 가능한 알림 수
+        this.cleanupInterval = null;
+      }
+
+      // 🔔 활성 알림 추가
+      addNotification(tag, notificationRef) {
+        this.activeNotifications.set(tag, {
+          notification: notificationRef,
+          timestamp: Date.now()
+        });
+        
+        console.log(`📝 활성 알림 추가: ${tag} (총 ${this.activeNotifications.size}개)`);
+        this.scheduleCleanup();
+      }
+
+      // 🔔 알림 제거
+      removeNotification(tag) {
+        if (this.activeNotifications.has(tag)) {
+          this.activeNotifications.delete(tag);
+          console.log(`🗑️ 활성 알림 제거: ${tag} (남은 ${this.activeNotifications.size}개)`);
+        }
+      }
+
+      // 🔔 오래된 알림 자동 정리
+      async cleanupOldNotifications() {
+        const now = Date.now();
+        const maxAge = 30000; // 30초 이상 된 알림 정리
+        
+        for (const [tag, data] of this.activeNotifications) {
+          if (now - data.timestamp > maxAge) {
+            try {
+              if (data.notification && typeof data.notification.close === 'function') {
+                data.notification.close();
+              }
+            } catch (error) {
+              console.warn(`⚠️ 알림 정리 실패: ${tag}`, error);
+            }
+            this.removeNotification(tag);
+          }
+        }
+
+        // 최대 개수 초과 시 오래된 것부터 제거
+        if (this.activeNotifications.size > this.maxNotifications) {
+          const sortedNotifications = Array.from(this.activeNotifications.entries())
+            .sort((a, b) => a[1].timestamp - b[1].timestamp);
+          
+          const toRemove = sortedNotifications.slice(0, this.activeNotifications.size - this.maxNotifications);
+          
+          for (const [tag, data] of toRemove) {
+            try {
+              if (data.notification && typeof data.notification.close === 'function') {
+                data.notification.close();
+              }
+            } catch (error) {
+              console.warn(`⚠️ 초과 알림 정리 실패: ${tag}`, error);
+            }
+            this.removeNotification(tag);
+          }
+        }
+      }
+
+      // 🔔 정리 작업 스케줄링
+      scheduleCleanup() {
+        if (this.cleanupInterval) {
+          clearTimeout(this.cleanupInterval);
+        }
+        
+        this.cleanupInterval = setTimeout(() => {
+          this.cleanupOldNotifications();
+        }, 5000);
+      }
+
+      // 🔔 모든 알림 정리
+      clearAll() {
+        for (const [tag, data] of this.activeNotifications) {
+          try {
+            if (data.notification && typeof data.notification.close === 'function') {
+              data.notification.close();
+            }
+          } catch (error) {
+            console.warn(`⚠️ 전체 알림 정리 실패: ${tag}`, error);
+          }
+        }
+        this.activeNotifications.clear();
+        console.log('🧹 모든 활성 알림 정리 완료');
+      }
+    }
+
     /* ===== 🔔 NotificationManager 클래스 ===== */
     class NotificationManager {
       constructor() {
         this.audioContext = null;
         this.soundBuffers = new Map();
         this.isInitialized = false;
+        
+        // 🔔 알림 큐 관리자
+        this.notificationQueue = new NotificationQueue();
         
         // 🔔 Push 구독 관련 속성
         this.pushSupported = false;
@@ -955,35 +1050,55 @@
 
       // 🔔 브라우저 알림 표시 (Push API와 기존 API 통합)
       showNotification(title, options = {}) {
+        // 📊 상세 로깅 시작
+        console.group('🔔 알림 표시 요청');
+        console.log('제목:', title);
+        console.log('옵션:', options);
+        console.log('권한 상태:', AppState.notifications.permission);
+        console.log('탭 가시성:', AppState.notifications.state.isTabVisible);
+        console.log('활성 알림 수:', this.notificationQueue.activeNotifications.size);
+        
         if (AppState.notifications.permission !== 'granted') {
           console.warn('⚠️ 알림 권한이 없어 알림을 표시할 수 없습니다');
+          console.groupEnd();
           return;
         }
 
         // 스마트 모드: 탭이 활성화되어 있으면 알림 표시 안 함 (항상 활성)
         if (AppState.notifications.state.isTabVisible) {
           console.log('📋 탭이 활성화되어 있어 알림을 표시하지 않습니다');
+          console.groupEnd();
           return;
         }
 
+        // 🔔 고유 태그 생성으로 중복 알림 차단 문제 해결
+        const uniqueTag = `eastalk-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
         const defaultOptions = {
           icon: '/favicon.ico',
           badge: '/favicon.ico',
-          tag: 'eastalk-message',
-          renotify: false,
+          tag: uniqueTag,
+          renotify: true,  // 연속 알림 허용
           requireInteraction: false,
           silent: false,
           ...options
         };
 
         // Push API 지원 여부에 따라 처리 방식 결정
+        console.log('🔧 Push API 지원:', this.pushSupported);
+        console.log('🔧 Service Worker 등록:', !!this.serviceWorkerRegistration);
+        
         if (this.pushSupported && this.serviceWorkerRegistration) {
           // Push API가 지원되는 경우: Service Worker를 통한 알림 표시
+          console.log('📤 Service Worker를 통한 Push 알림 사용');
           this.showPushNotification(title, defaultOptions);
         } else {
           // 기존 방식: 직접 Notification API 사용
+          console.log('📢 직접 Notification API 사용');
           this.showDirectNotification(title, defaultOptions);
         }
+        
+        console.groupEnd();
       }
 
       // 🔔 Service Worker를 통한 Push 알림 표시
@@ -995,8 +1110,13 @@
             return;
           }
 
+          // 🔄 기존 알림 정리
+          this.notificationQueue.cleanupOldNotifications();
+          
           await this.serviceWorkerRegistration.showNotification(title, {
             ...options,
+            renotify: true,  // 연속 알림 허용
+            requireInteraction: false,
             actions: [
               {
                 action: 'open',
@@ -1009,11 +1129,12 @@
             ],
             data: {
               timestamp: Date.now(),
-              source: 'eastalk-web'
+              source: 'eastalk-web',
+              tag: options.tag
             }
           });
 
-          console.log('✅ Push 알림 표시됨 (Service Worker)');
+          console.log(`✅ Push 알림 표시됨 (Service Worker, Tag: ${options.tag})`);
 
         } catch (error) {
           console.error('❌ Push 알림 표시 실패:', error);
@@ -1025,20 +1146,42 @@
       // 🔔 직접 Notification API를 통한 알림 표시
       showDirectNotification(title, options) {
         try {
-          const notification = new Notification(title, options);
+          // 🔄 기존 알림 정리 (큐 관리자 사용)
+          this.notificationQueue.cleanupOldNotifications();
           
-          // 알림 클릭 시 창 포커스
+          const notification = new Notification(title, options);
+          const tag = options.tag || `eastalk-${Date.now()}`;
+          
+          // 🔔 알림 큐에 추가
+          this.notificationQueue.addNotification(tag, notification);
+          
+          // 알림 클릭 시 창 포커스 및 큐에서 제거
           notification.onclick = () => {
             window.focus();
+            this.notificationQueue.removeNotification(tag);
             notification.close();
+            console.log('👆 알림 클릭됨 - 창 포커스');
           };
           
-          // 자동 닫기 (5초 후)
+          // 알림 닫기 시 큐에서 제거
+          notification.onclose = () => {
+            this.notificationQueue.removeNotification(tag);
+            console.log('❌ 알림 닫힘 - 큐에서 제거');
+          };
+          
+          // 알림 오류 시 큐에서 제거
+          notification.onerror = (error) => {
+            this.notificationQueue.removeNotification(tag);
+            console.error('❌ 알림 오류:', error);
+          };
+          
+          // 자동 닫기 (10초 후로 연장)
           setTimeout(() => {
+            this.notificationQueue.removeNotification(tag);
             notification.close();
-          }, 5000);
+          }, 10000);
 
-          console.log('✅ 직접 알림 표시됨 (Notification API)');
+          console.log(`✅ 직접 알림 표시됨 (Tag: ${tag})`);
 
         } catch (error) {
           console.error('❌ 직접 알림 표시 실패:', error);
@@ -1341,6 +1484,16 @@
         // Page Visibility API 연동
         document.addEventListener('visibilitychange', () => {
           this.handleVisibilityChange();
+        });
+        
+        // 🔔 페이지 종료 시 모든 알림 정리
+        window.addEventListener('beforeunload', () => {
+          this.notificationQueue.clearAll();
+        });
+        
+        // 🔔 페이지 숨김 시 정리 작업
+        window.addEventListener('pagehide', () => {
+          this.notificationQueue.clearAll();
         });
         
         // 초기 상태 설정
