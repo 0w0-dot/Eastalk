@@ -72,7 +72,8 @@
 - **오류 해결**: 100% 완료 (모든 기능 정상 작동)
 
 #### 테스트 환경
-- **스테이징 서버**: https://eastalk-staging.onrender.com
+- **프로덕션 서버**: https://eastalk.onrender.com (메인 서비스)
+- **스테이징 서버**: https://eastalk-staging.onrender.com (테스트 환경)
 - **테스트 계정**: 나우창 (0809), 신짱구 (1234)
 - **모바일 테스트**: PWA 설치 후 백그라운드 알림 확인
 - **브라우저**: 데스크톱/모바일 모든 환경 지원
@@ -94,7 +95,7 @@
   - 환경별 VAPID Subject 자동 설정 (Safari 호환성 개선)
     * 로컬: `mailto:admin@localhost.dev`
     * 스테이징: `mailto:admin@eastalk-staging.onrender.com`
-    * 프로덕션: `mailto:admin@eastalk.onrender.com`
+    * 프로덕션: `mailto:admin@eastalk.onrender.com` (메인 서버)
   - Service Worker 등록 로직 표준화 (`navigator.serviceWorker.ready` 대기)
   - 모바일 푸시 구독 재시도 메커니즘 구현 (3회 재시도)
   - 구체적인 브라우저별 오류 진단 시스템
