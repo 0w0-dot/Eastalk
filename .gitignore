@@ -55,3 +55,6 @@ DEPLOYMENT_LOG.md
 
 # Render deployment configs (may contain sensitive info)
 render*.yaml
+
+# Documentation files (not needed for server operation)
+*.md
