@@ -151,14 +151,14 @@ const MessageSchema = new mongoose.Schema({
   mediaUrl: String,
   mime: String,
   fileName: String,
-  mid: { type: String, unique: true, required: true },
+  mid: { type: String, required: true },
   reactions: { type: Object, default: {} }
 }, { timestamps: true });
 
 // 성능 최적화 인덱스 생성
 MessageSchema.index({ room: 1, ts: -1 }); // 방별 시간순 정렬 (메인 쿼리)
 MessageSchema.index({ room: 1, ts: 1 });  // 방별 시간 오름차순 (과거 메시지 조회용)
-MessageSchema.index({ mid: 1 });          // 메시지 ID 조회 (중복 방지용)
+MessageSchema.index({ mid: 1 }, { unique: true });          // 메시지 ID 조회 (중복 방지용)
 MessageSchema.index({ userId: 1, ts: -1 }); // 사용자별 메시지 조회용
 
 // 🔔 Push 구독 스키마 정의
@@ -669,10 +669,10 @@ app.post('/api/messages', async (req, res) => {
     sendPushNotifications({
       userId: userId,
       nickname: result.nickname,
-      text: sanitizedText,
+      text: result.text,
       room: room,
-      mid: mid,
-      ts: ts
+      mid: result.mid,
+      ts: result.ts
     }).catch(error => {
       console.error('Push 알림 전송 오류:', error);
     });
@@ -916,8 +916,8 @@ app.post('/api/upload', async (req, res) => {
       nickname: result.nickname,
       text: '📷 이미지를 전송했습니다',
       room: room,
-      mid: mid,
-      ts: ts
+      mid: result.mid,
+      ts: result.ts
     }).catch(error => {
       console.error('Push 알림 전송 오류:', error);
     });
