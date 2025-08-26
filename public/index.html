@@ -100,11 +100,49 @@
     }
     .tab.active{ background:var(--accent); color:var(--accent-ink); border-color:transparent; }
 
-    /* Messages */
-    .messages{
-      flex:1; overflow-y:auto; padding:12px; padding-bottom:96px;
-      display:flex; flex-direction:column; gap:8px; background:#fff;
-      -webkit-overflow-scrolling:touch; touch-action:pan-y; min-height:0;
+    /* Messages Container - 외부 스크롤 컨테이너 */
+    .messages-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0; /* flexbox 컨테이너에서 필수 */
+      background: #fff;
+      position: relative;
+      overflow: hidden; /* 내부 스크롤만 허용 */
+    }
+    
+    /* Messages - 내부 스크롤 영역 */
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 12px;
+      padding-bottom: 96px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      /* 최신 스크롤 최적화 */
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-y: contain; /* 스크롤 체인 방지 */
+      scroll-behavior: smooth;
+      /* 스크롤바 스타일링 */
+      scrollbar-width: thin;
+      scrollbar-color: var(--line) transparent;
+    }
+    
+    /* 웹킷 기반 브라우저 스크롤바 커스터마이징 */
+    .messages::-webkit-scrollbar {
+      width: 6px;
+    }
+    .messages::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .messages::-webkit-scrollbar-thumb {
+      background: var(--line);
+      border-radius: 3px;
+    }
+    .messages::-webkit-scrollbar-thumb:hover {
+      background: var(--muted);
     }
     .msg-row{ display:flex; align-items:flex-end; gap:8px; }
     .msg-row.me{ justify-content:flex-end; }
@@ -173,6 +211,12 @@
       .tabs{ padding:6px; }
       .tab{ padding:6px 10px; font-size:13px; }
       .messages{ padding:8px; }
+      /* 모바일 스크롤 최적화 */
+      .messages-container { 
+        height: 100%; 
+        min-height: 0;
+        max-height: calc(100vh - 200px); /* 헤더, 탭, 입력창 공간 확보 */
+      }
       .composer{ padding:8px; gap:6px; }
       .connected-users .user-avatar{ width:24px; height:24px; font-size:10px; }
       .connected-users{ gap:2px; }
@@ -224,7 +268,6 @@
     }
 
     /* ===== Load More Button ===== */
-    .messages-container{ position: relative; flex: 1; overflow: hidden; }
     .load-more-btn{
       position: sticky; top: 0; z-index: 10;
       width: 100%; padding: 8px 16px; margin-bottom: 8px;
@@ -932,6 +975,82 @@
       }
     };
 
+    // 🚀 스크롤 관리 유틸리티
+    const ScrollManager = {
+      // 스크롤 컨테이너 가져오기 (개선된 구조)
+      getScrollContainer() {
+        return document.querySelector('.messages') || document.getElementById('messages');
+      },
+      
+      // 현재 스크롤이 하단에 있는지 확인
+      isAtBottom(threshold = 80) {
+        const container = this.getScrollContainer();
+        if (!container) return true;
+        
+        return Math.abs(container.scrollHeight - container.scrollTop - container.clientHeight) < threshold;
+      },
+      
+      // 부드럽게 하단으로 스크롤
+      scrollToBottom(smooth = true) {
+        const container = this.getScrollContainer();
+        if (!container) return;
+        
+        if (smooth && 'scrollTo' in container) {
+          container.scrollTo({
+            top: container.scrollHeight,
+            behavior: 'smooth'
+          });
+        } else {
+          container.scrollTop = container.scrollHeight;
+        }
+      },
+      
+      // 스크롤 위치 저장
+      saveScrollPosition() {
+        const container = this.getScrollContainer();
+        if (!container) return null;
+        
+        return {
+          scrollTop: container.scrollTop,
+          scrollHeight: container.scrollHeight,
+          clientHeight: container.clientHeight
+        };
+      },
+      
+      // 스크롤 위치 복원 (새 메시지 로드 후)
+      restoreScrollPosition(savedPosition) {
+        const container = this.getScrollContainer();
+        if (!container || !savedPosition) return;
+        
+        const newScrollHeight = container.scrollHeight;
+        const heightDifference = newScrollHeight - savedPosition.scrollHeight;
+        
+        container.scrollTop = savedPosition.scrollTop + heightDifference;
+      },
+      
+      // 메시지 전송 후 자동 스크롤 (조건부)
+      autoScrollAfterMessage() {
+        if (this.isAtBottom()) {
+          this.scrollToBottom(false); // 즉시 스크롤
+        }
+      },
+      
+      // 스크롤 상태 디버그 정보
+      getScrollInfo() {
+        const container = this.getScrollContainer();
+        if (!container) return null;
+        
+        const maxScroll = container.scrollHeight - container.clientHeight;
+        return {
+          scrollTop: container.scrollTop,
+          scrollHeight: container.scrollHeight,
+          clientHeight: container.clientHeight,
+          isAtBottom: this.isAtBottom(),
+          scrollPercentage: maxScroll > 0 ? Math.round((container.scrollTop / maxScroll) * 100) : 100
+        };
+      }
+    };
+
     // 🚀 백그라운드 프리로딩 매니저
     const PreloadManager = {
       // 방 방문 통계 업데이트
@@ -1286,10 +1405,7 @@
         messagesEl.appendChild(sep);
       }
 
-      const messagesContainer = document.querySelector('.messages-container');
-      const stayAtBottom = messagesContainer ? 
-        (messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight) < 80 :
-        (messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight) < 80;
+      const stayAtBottom = ScrollManager.isAtBottom();
 
       const row=document.createElement('div');
       const isMe = (m.userId === AppState.userId);
@@ -1348,11 +1464,7 @@
       }
 
       if (stayAtBottom) {
-        if (messagesContainer) {
-          messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        } else {
-          messagesEl.scrollTop = messagesEl.scrollHeight;
-        }
+        ScrollManager.scrollToBottom(false);
       }
       
       // 🚀 새로 추가된 이미지 관찰 등록
@@ -1378,10 +1490,8 @@
           const oldestTs = response?.oldestTimestamp || null;
           
           if (messages && messages.length > 0) {
-            // 스크롤 위치 보존을 위해 현재 높이 저장
-            const messagesEl = DOM.el('#messages');
-            const oldScrollHeight = messagesEl.scrollHeight;
-            const oldScrollTop = messagesEl.scrollTop;
+            // 스크롤 위치 보존을 위해 현재 상태 저장
+            const savedPosition = ScrollManager.saveScrollPosition();
             
             // 메시지들을 맨 위에 추가 (시간 순서대로)
             messages.forEach(msg => {
@@ -1399,8 +1509,7 @@
             };
             
             // 스크롤 위치 복원 (새로 추가된 메시지만큼 아래로 이동)
-            const newScrollHeight = messagesEl.scrollHeight;
-            messagesEl.scrollTop = oldScrollTop + (newScrollHeight - oldScrollHeight);
+            ScrollManager.restoreScrollPosition(savedPosition);
             
             // 🚀 새로 로드된 과거 이미지들 관찰 등록
             LazyImageManager.observeImages();
@@ -1448,12 +1557,7 @@
             };
             
             if (forceScroll) {
-              const messagesContainer = document.querySelector('.messages-container');
-              if (messagesContainer) {
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
-              } else {
-                messagesEl.scrollTop = messagesEl.scrollHeight;
-              }
+              ScrollManager.scrollToBottom(false);
             }
           }
           
