@@ -515,7 +515,45 @@ console.log('활성 알림 수:', this.notificationQueue.activeNotifications.siz
 - **오류 복구**: 모든 오류 상황에서 안정적 복구 메커니즘
 - **모니터링**: 실시간 상태 추적으로 문제 조기 발견 가능
 
+#### 15. 알림에서 undefined 표시 문제 해결 (2025-08-26 오후)
+- **완료일**: 2025-08-26 오후 19:15
+- **상태**: 완료 ✅
+- **해결된 핵심 문제**:
+  - 알림 제목에 "undefined" 표시되는 문제
+  - 서버와 클라이언트 간 필드명 불일치 문제
+  - 안전한 fallback 체인 부재로 인한 예외 상황
+
+### 문제 원인 분석
+- **서버**: `result.nickname` 필드로 메시지 전송 (server.js)
+- **클라이언트**: `message.name` 필드를 알림 제목으로 사용 (index.html)
+- **결과**: `message.name`이 undefined이므로 알림에서 "undefined" 표시
+
+### 해결 방안 구현
+- **클라이언트 수정**: `message.name` → `message.nickname || message.name || '익명'`
+- **안전한 fallback**: 3단계 fallback 체인으로 모든 상황 대응
+- **완전 호환성**: 기존 코드와의 하위 호환성 보장
+
+### 테스트 검증 완료
+- **스테이징 서버**: https://eastalk-staging.onrender.com 배포 완료
+- **다중 계정 테스트**: 나우창(0809) ↔ 신짱구(1234) 메시지 교환
+- **알림 확인**: 사용자 이름이 정확하게 표시됨 ✅
+
+### 기술적 구현사항
+```javascript
+// Before (문제 코드)
+this.showNotification(`${message.name}${roomText}`, {
+
+// After (해결 코드)  
+this.showNotification(`${message.nickname || message.name || '익명'}${roomText}`, {
+```
+
+### 해결 효과
+- ✅ **알림 제목**: "undefined" → "신짱구" 정확한 사용자 이름 표시
+- ✅ **안전성**: 모든 예외 상황에서 적절한 이름 표시 보장
+- ✅ **호환성**: 기존 시스템과 완전 호환
+- ✅ **확장성**: 향후 필드 변경에도 안정적 대응
+
 ---
-**최종 업데이트**: 2025-08-26 오후 17:30
+**최종 업데이트**: 2025-08-26 오후 19:15
 **담당자**: Claude SuperClaude  
-**상태**: 알림 시스템 완전 개선 ✅ - 모든 알림 문제 근본 해결 완료
+**상태**: 알림 undefined 문제 해결 ✅ - 사용자 이름 정확 표시 완료
