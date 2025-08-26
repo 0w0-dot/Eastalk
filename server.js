@@ -999,6 +999,24 @@ io.on('connection', (socket) => {
   });
   
   // 연결 해제 처리
+  // 클라이언트 heartbeat 처리 (지능형 Keep-Alive 지원)
+  socket.on('client-heartbeat', (data, callback) => {
+    const currentTime = Date.now();
+    const clientTime = data.timestamp;
+    const networkLatency = currentTime - clientTime;
+    
+    // 응답 콜백 (클라이언트가 지연시간 측정용)
+    if (typeof callback === 'function') {
+      callback({
+        serverTime: currentTime,
+        clientTime: clientTime,
+        latency: networkLatency
+      });
+    }
+    
+    console.log(`💓 클라이언트 Heartbeat 수신: ${socket.id} (지연: ${networkLatency}ms)`);
+  });
+
   socket.on('disconnect', (reason) => {
     console.log(`👤 사용자 연결 해제: ${socket.id} (${reason})`);
     
@@ -1047,8 +1065,8 @@ app.use('*', (req, res) => {
   res.status(404).json({ error: 'Not Found' });
 });
 
-// ===== Keep-Alive 시스템 (Render Sleep 방지) =====
-function initKeepAliveSystem() {
+// ===== 지능형 Keep-Alive 시스템 (접속자 기반 Sleep 방지) =====
+function initSmartKeepAliveSystem() {
   // 환경별 서버 URL 자동 감지
   const getServerURL = () => {
     // 환경 변수로 직접 지정된 경우 우선 사용
@@ -1082,11 +1100,35 @@ function initKeepAliveSystem() {
 
   const KEEP_ALIVE_URL = getServerURL();
   
-  console.log('😴 Keep-Alive 시스템 활성화');
+  console.log('🧠 지능형 Keep-Alive 시스템 활성화');
   console.log(`🎯 Target URL: ${KEEP_ALIVE_URL}/health`);
+  console.log('💡 전략: 접속자 있음 → Socket.IO 자연 유지, 접속자 없음 → 선택적 백업');
   
-  // 14분마다 자가 ping (15분 sleep 전에 깨우기)
-  const keepAliveJob = cron.schedule('*/14 * * * *', async () => {
+  // 지능형 Keep-Alive 로직 (접속자 기반)
+  const smartKeepAliveJob = cron.schedule('*/14 * * * *', async () => {
+    const connectedCount = ConnectedUsersManager.getCount();
+    const currentTime = new Date().toISOString();
+    
+    console.log(`🔍 Keep-Alive 체크: 현재 접속자 ${connectedCount}명 (${currentTime})`);
+    
+    // 💡 지능형 전략: 접속자가 있으면 Socket.IO가 자연스럽게 Keep-Alive 역할
+    if (connectedCount > 0) {
+      console.log('✨ 접속자 존재 → Socket.IO 연결이 자연적으로 Sleep 방지');
+      console.log('🛡️ 백업 ping은 생략하여 리소스 절약');
+      
+      // 통계만 업데이트 (실제 ping 없이)
+      keepAliveStats.totalAttempts++;
+      keepAliveStats.successCount++;
+      keepAliveStats.consecutiveFailures = 0;
+      keepAliveStats.lastSuccess = currentTime;
+      keepAliveStats.lastPingTime = currentTime;
+      
+      return; // 실제 ping 실행하지 않음
+    }
+    
+    // 접속자가 없을 때만 백업 ping 실행
+    console.log('😴 접속자 없음 → 백업 Keep-Alive ping 실행');
+    
     try {
       const fetch = (await import('node-fetch')).default;
       const start = Date.now();
@@ -1110,19 +1152,19 @@ function initKeepAliveSystem() {
       
       if (response.ok) {
         const data = await response.json();
-        console.log(`✅ Keep-Alive Success: ${response.status} (${duration}ms) - Environment: ${data.environment || 'unknown'}`);
+        console.log(`✅ 백업 Keep-Alive 성공: ${response.status} (${duration}ms) - Environment: ${data.environment || 'unknown'}`);
         updateKeepAliveStats(true, duration);
       } else {
-        console.log(`⚠️ Keep-Alive Warning: ${response.status} (${duration}ms) - Response not OK`);
+        console.log(`⚠️ 백업 Keep-Alive 경고: ${response.status} (${duration}ms) - Response not OK`);
         updateKeepAliveStats(false, duration);
       }
       
     } catch (error) {
       const errorType = error.name === 'AbortError' ? 'TIMEOUT' : 'ERROR';
-      console.log(`❌ Keep-Alive Failed (${errorType}): ${error.message} - ${new Date().toISOString()}`);
+      console.log(`❌ 백업 Keep-Alive 실패 (${errorType}): ${error.message} - ${new Date().toISOString()}`);
       updateKeepAliveStats(false, 0);
       
-      // 연속 실패 시 재시작 로직 추가 (선택적)
+      // 연속 실패 시 경고 (접속자 없을 때만 중요함)
       if (keepAliveStats.consecutiveFailures >= 3) {
         console.log('⚠️ Keep-Alive 연속 실패 감지, 다음 시도에서 재초기화');
       }
@@ -1131,8 +1173,9 @@ function initKeepAliveSystem() {
   
   // 서버 시작 후 5분 뒤부터 시작 (초기화 시간 확보)
   setTimeout(() => {
-    keepAliveJob.start();
-    console.log('🚀 Keep-Alive 스케줄러 시작됨 (14분 간격)');
+    smartKeepAliveJob.start();
+    console.log('🚀 지능형 Keep-Alive 스케줄러 시작됨 (14분 간격)');
+    console.log('💡 Socket.IO ping 간격: 25초, 타임아웃: 20초 (자동 연결 유지)');
   }, 5 * 60 * 1000); // 5분 지연
 }
 
@@ -1180,12 +1223,15 @@ function updateKeepAliveStats(success, responseTime) {
   }
 }
 
-// Keep-Alive 통계 조회 API
+// 지능형 Keep-Alive 통계 조회 API
 app.get('/api/keepalive-stats', (req, res) => {
   const uptime = Math.floor((Date.now() - keepAliveStats.uptimeStart) / 1000);
   const successRate = keepAliveStats.totalAttempts > 0 
     ? Math.round((keepAliveStats.successCount / keepAliveStats.totalAttempts) * 100)
     : 0;
+  
+  // 현재 접속자 수 추가
+  const connectedCount = ConnectedUsersManager.getCount();
   
   // 상태 결정 로직 개선
   let healthStatus = 'healthy';
@@ -1220,6 +1266,15 @@ app.get('/api/keepalive-stats', (req, res) => {
     successRate: `${successRate}%`,
     status: healthStatus,
     
+    // 🧠 지능형 Keep-Alive 시스템 정보
+    intelligentSystem: {
+      connectedUsers: connectedCount,
+      strategy: connectedCount > 0 ? 'Socket.IO 자연 유지' : '백업 ping 활성',
+      nextCheck: '14분 간격',
+      socketIOPing: '25초 간격 (자동)',
+      resourceSaving: connectedCount > 0 ? '활성' : '대기'
+    },
+    
     // 환경 정보
     environment: process.env.NODE_ENV || 'development',
     keepAliveEnabled: isProduction || process.env.NODE_ENV === 'staging'
@@ -1251,7 +1306,7 @@ server.listen(PORT, '0.0.0.0', () => {
   // 😴 Keep-Alive 시스템 초기화 (Sleep 방지)
   const shouldUseKeepAlive = isProduction || process.env.NODE_ENV === 'staging';
   if (shouldUseKeepAlive) {
-    initKeepAliveSystem();
+    initSmartKeepAliveSystem();
   } else {
     console.log('🧪 개발 모드: Keep-Alive 시스템 비활성화');
   }

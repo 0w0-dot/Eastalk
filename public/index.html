@@ -417,9 +417,137 @@
       connectedUsers: [] // 현재 접속자 목록
     };
 
-    // Socket.io 연결
-    const socket = io();
+    // Socket.io 연결 (지능형 Keep-Alive 설정)
+    const socket = io({
+      pingInterval: 25000,  // 25초마다 ping (Socket.IO v4 기본값)
+      pingTimeout: 20000    // 20초 응답 타임아웃
+    });
 
+    /* ===== 지능형 Keep-Alive 클라이언트 시스템 ===== */
+    
+    // 활성 탭 감지 시스템
+    const TabActivityMonitor = {
+      isActive: true,
+      lastActiveTime: Date.now(),
+      
+      init() {
+        // Page Visibility API 활용
+        document.addEventListener('visibilitychange', () => {
+          this.isActive = !document.hidden;
+          if (this.isActive) {
+            this.lastActiveTime = Date.now();
+            console.log('🎯 탭 활성화 → Heartbeat 재개');
+          } else {
+            console.log('😴 탭 비활성화 → Heartbeat 일시중지');
+          }
+        });
+        
+        // Focus/Blur 이벤트
+        window.addEventListener('focus', () => {
+          this.isActive = true;
+          this.lastActiveTime = Date.now();
+        });
+        
+        window.addEventListener('blur', () => {
+          this.isActive = false;
+        });
+        
+        // 사용자 활동 감지 (마우스, 키보드)
+        ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'].forEach(event => {
+          document.addEventListener(event, () => {
+            if (this.isActive) {
+              this.lastActiveTime = Date.now();
+            }
+          }, { passive: true });
+        });
+      },
+      
+      shouldSendHeartbeat() {
+        // 탭이 활성화되어 있고, 최근 5분 내 활동이 있었다면
+        const fiveMinutes = 5 * 60 * 1000;
+        return this.isActive && (Date.now() - this.lastActiveTime < fiveMinutes);
+      }
+    };
+    
+    // Socket.IO 기반 지능형 Heartbeat 시스템
+    const SmartHeartbeat = {
+      intervalId: null,
+      stats: {
+        sent: 0,
+        received: 0,
+        lastPing: null,
+        averageLatency: 0
+      },
+      
+      start() {
+        // 3분마다 heartbeat (Socket.IO 기본 ping보다 느리게)
+        this.intervalId = setInterval(() => {
+          if (TabActivityMonitor.shouldSendHeartbeat() && socket.connected) {
+            this.sendHeartbeat();
+          }
+        }, 3 * 60 * 1000); // 3분 간격
+        
+        console.log('❤️ 지능형 Heartbeat 시스템 시작됨 (3분 간격)');
+      },
+      
+      stop() {
+        if (this.intervalId) {
+          clearInterval(this.intervalId);
+          this.intervalId = null;
+          console.log('💔 Heartbeat 시스템 중지됨');
+        }
+      },
+      
+      sendHeartbeat() {
+        const startTime = Date.now();
+        this.stats.lastPing = startTime;
+        this.stats.sent++;
+        
+        // Socket.IO의 volatile emit 사용 (연결 끊어져도 버퍼링하지 않음)
+        socket.volatile.emit('client-heartbeat', { timestamp: startTime }, (response) => {
+          const latency = Date.now() - startTime;
+          this.stats.received++;
+          
+          // 이동 평균으로 지연시간 계산
+          if (this.stats.averageLatency === 0) {
+            this.stats.averageLatency = latency;
+          } else {
+            this.stats.averageLatency = Math.round((this.stats.averageLatency * 0.8) + (latency * 0.2));
+          }
+          
+          console.log(`💓 Heartbeat: ${latency}ms (avg: ${this.stats.averageLatency}ms)`);
+        });
+      }
+    };
+    
+    // Socket.IO 연결 상태 모니터링
+    socket.on('connect', () => {
+      console.log('✅ Socket.IO 연결됨 - Keep-Alive 자동 활성화');
+      SmartHeartbeat.start();
+    });
+    
+    socket.on('disconnect', (reason) => {
+      console.log('❌ Socket.IO 연결 해제:', reason);
+      SmartHeartbeat.stop();
+    });
+    
+    socket.on('reconnect', (attemptNumber) => {
+      console.log(`🔄 Socket.IO 재연결 성공 (시도: ${attemptNumber})`);
+      SmartHeartbeat.start();
+    });
+    
+    // ping/pong 이벤트 모니터링 (디버깅용)
+    socket.io.on('ping', () => {
+      console.log('🏓 Socket.IO ping 수신');
+    });
+    
+    socket.io.on('pong', (latency) => {
+      console.log(`🏓 Socket.IO pong 수신 (${latency}ms)`);
+    });
+    
+    // 초기화
+    TabActivityMonitor.init();
+    
     /* ===== 도우미 함수들 ===== */
     // DOM 유틸리티
     const DOM = {
