@@ -597,50 +597,41 @@
         </div>
         
         <!-- 권한 요청 버튼 -->
-        <button id="requestNotificationBtn" class="btn btn-primary" style="width: 100%; margin-bottom: 12px; display: none;">
-          브라우저 알림 허용하기
-        </button>
-        
-        <!-- 알림 종류 설정 -->
-        <div class="notification-toggles" style="display: grid; gap: 8px;">
-          <label class="notification-toggle" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-            <input type="checkbox" id="browserNotificationToggle" />
-            <span>브라우저 푸시 알림</span>
-          </label>
-          
-          <label class="notification-toggle" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-            <input type="checkbox" id="soundNotificationToggle" />
-            <span>소리 알림</span>
-          </label>
-          
-          <label class="notification-toggle" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-            <input type="checkbox" id="tabTitleToggle" />
-            <span>탭 제목 알림</span>
-          </label>
-          
-          <label class="notification-toggle" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-            <input type="checkbox" id="smartModeToggle" />
-            <span>스마트 모드 (탭 비활성시만)</span>
-          </label>
-        </div>
-        
-        <!-- 소리 설정 -->
-        <div id="soundSettings" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0;">
-          <label style="display: block; margin-bottom: 8px; font-size: 14px;">소리 종류:</label>
-          <select id="soundTypeSelect" class="input" style="margin-bottom: 8px;">
-            <option value="ding">딩 (기본)</option>
-            <option value="pop">팝</option>
-            <option value="chime">차임</option>
-          </select>
-          
-          <label style="display: block; margin-bottom: 8px; font-size: 14px;">볼륨: <span id="volumeValue">70%</span></label>
-          <input type="range" id="volumeSlider" min="0" max="100" value="70" 
-                 style="width: 100%; margin-bottom: 8px;" />
-          
-          <button id="testSoundBtn" class="btn btn-ghost" style="width: 100%; font-size: 14px;">
-            🔊 소리 테스트
+        <div id="permissionRequestArea" style="margin-bottom: 12px; display: none;">
+          <div style="padding: 10px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 6px; margin-bottom: 8px; font-size: 13px; color: #856404;">
+            💡 <strong>브라우저 알림을 허용하면:</strong><br>
+            • 새 메시지를 놓치지 않을 수 있어요<br>
+            • 다른 탭을 보고 있어도 알림을 받을 수 있어요<br>
+            • 언제든지 설정에서 끌 수 있어요
+          </div>
+          <button id="requestNotificationBtn" class="btn btn-primary" style="width: 100%;">
+            🔔 브라우저 알림 허용하기
           </button>
         </div>
+        
+        <!-- 권한 거부 안내 -->
+        <div id="permissionDeniedArea" style="margin-bottom: 12px; display: none;">
+          <div style="padding: 10px; background: #f8d7da; border: 1px solid #f1aeb5; border-radius: 6px; font-size: 13px; color: #721c24;">
+            ❌ <strong>브라우저 알림이 차단되었습니다</strong><br>
+            탭 제목과 소리 알림은 계속 작동합니다.<br>
+            <small style="opacity: 0.8;">브라우저 설정에서 알림을 허용할 수 있습니다.</small>
+          </div>
+        </div>
+        
+        <!-- 알림 종류 설정 -->
+        <div class="notification-status" style="display: grid; gap: 8px; background: #e8f5e8; padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+          <div style="display: flex; align-items: center; gap: 8px; font-weight: 500; color: #0d7377;">
+            <span>✓ 모든 알림 기능이 활성화되어 있습니다</span>
+          </div>
+          <div style="font-size: 14px; color: #666; margin-left: 16px;">
+            • 브라우저 푸시 알림<br/>
+            • 소리 알림<br/>
+            • 탭 제목 알림<br/>
+            • 스마트 모드 (탭 비활성시만)
+          </div>
+        </div>
+        
+        <!-- 소리 설정 제거됨 - 기본 소리만 사용 -->
       </div>
     </div>
   </div>
@@ -688,16 +679,7 @@
       // 🔔 알림 시스템 상태
       notifications: {
         permission: 'default', // 'granted', 'denied', 'default'
-        enabled: {
-          browser: true,      // 브라우저 푸시 알림
-          sound: true,        // 소리 알림
-          tabTitle: true,     // 탭 제목 알림
-          smartMode: true     // 스마트 모드 (탭 비활성시만 알림)
-        },
-        settings: {
-          soundVolume: 0.7,   // 소리 볼륨 (0.0 - 1.0)
-          soundType: 'ding'   // 'ding', 'pop', 'chime'
-        },
+        // 소리 설정 제거됨 - 기본값만 사용 (ding, 70% 볼륨)
         state: {
           isTabVisible: true,   // Page Visibility API 상태
           unreadCount: 0,       // 읽지 않은 메시지 수
@@ -784,9 +766,9 @@
 
       // 🎵 사운드 재생
       playSound(type = null) {
-        if (!AppState.notifications.enabled.sound || !this.isInitialized) return;
+        if (!this.isInitialized) return;
         
-        const soundType = type || AppState.notifications.settings.soundType;
+        const soundType = type || 'ding'; // 기본 소리
         const buffer = this.soundBuffers.get(soundType);
         
         if (!buffer) {
@@ -799,7 +781,7 @@
           const gainNode = this.audioContext.createGain();
           
           source.buffer = buffer;
-          gainNode.gain.value = AppState.notifications.settings.soundVolume;
+          gainNode.gain.value = 0.7; // 기본 볼륨 70%
           
           source.connect(gainNode);
           gainNode.connect(this.audioContext.destination);
@@ -812,9 +794,16 @@
 
       // 🏷️ 탭 제목 알림 (깜빡임 효과)
       updateTabTitle(unreadCount = 0) {
-        if (!AppState.notifications.enabled.tabTitle) return;
+        // 탭 제목 알림 (항상 활성화)
         
         const state = AppState.notifications.state;
+        
+        // 원래 제목이 설정되지 않았다면 현재 제목을 저장
+        if (!state.originalTitle || state.originalTitle === '') {
+          state.originalTitle = 'Eastalk (Web)';
+        }
+        
+        console.log(`📋 탭 제목 업데이트: ${unreadCount}개 메시지, 탭 표시: ${state.isTabVisible}`);
         
         // 기존 인터벌 클리어
         if (state.titleInterval) {
@@ -823,25 +812,32 @@
         }
         
         if (unreadCount > 0) {
-          let isShowingCount = true;
           const newMessage = `(${unreadCount}) ${state.originalTitle}`;
           
+          // 즉시 제목 변경
           document.title = newMessage;
           
-          // 깜빡임 효과
-          state.titleInterval = setInterval(() => {
-            if (AppState.notifications.state.isTabVisible) {
-              // 탭이 활성화되면 깜빡임 중지
-              clearInterval(state.titleInterval);
-              state.titleInterval = null;
-              document.title = state.originalTitle;
-              return;
-            }
+          // 탭이 비활성화되어 있을 때만 깜빡임 효과
+          if (!state.isTabVisible) {
+            let isShowingCount = true;
             
-            document.title = isShowingCount ? newMessage : state.originalTitle;
-            isShowingCount = !isShowingCount;
-          }, 1000);
+            state.titleInterval = setInterval(() => {
+              // 탭이 활성화되면 깜빡임 중지하고 원래 제목으로 복원
+              if (AppState.notifications.state.isTabVisible) {
+                clearInterval(state.titleInterval);
+                state.titleInterval = null;
+                document.title = state.originalTitle;
+                AppState.notifications.state.unreadCount = 0;
+                return;
+              }
+              
+              // 깜빡임: 카운트 표시 ↔ 원래 제목
+              document.title = isShowingCount ? newMessage : state.originalTitle;
+              isShowingCount = !isShowingCount;
+            }, 800); // 800ms 간격으로 깜빡임
+          }
         } else {
+          // 읽지 않은 메시지가 없으면 원래 제목으로 복원
           document.title = state.originalTitle;
           state.unreadCount = 0;
         }
@@ -849,14 +845,12 @@
 
       // 🔔 브라우저 푸시 알림 표시
       showNotification(title, options = {}) {
-        if (!AppState.notifications.enabled.browser || 
-            AppState.notifications.permission !== 'granted') {
+        if (AppState.notifications.permission !== 'granted') {
           return;
         }
 
-        // 스마트 모드: 탭이 활성화되어 있으면 알림 표시 안 함
-        if (AppState.notifications.enabled.smartMode && 
-            AppState.notifications.state.isTabVisible) {
+        // 스마트 모드: 탭이 활성화되어 있으면 알림 표시 안 함 (항상 활성)
+        if (AppState.notifications.state.isTabVisible) {
           return;
         }
 
@@ -925,8 +919,6 @@
       saveSettings() {
         try {
           localStorage.setItem('eastalk_notification_settings', JSON.stringify({
-            enabled: AppState.notifications.enabled,
-            settings: AppState.notifications.settings,
             permission: AppState.notifications.permission
           }));
         } catch (error) {
@@ -940,8 +932,7 @@
           const saved = localStorage.getItem('eastalk_notification_settings');
           if (saved) {
             const settings = JSON.parse(saved);
-            AppState.notifications.enabled = { ...AppState.notifications.enabled, ...settings.enabled };
-            AppState.notifications.settings = { ...AppState.notifications.settings, ...settings.settings };
+            // settings 제거됨 - 기본값 사용
             AppState.notifications.permission = settings.permission || 'default';
           }
         } catch (error) {
@@ -2365,47 +2356,36 @@
     function setupNotificationUI() {
       const elements = {
         requestBtn: el('#requestNotificationBtn'),
-        browserToggle: el('#browserNotificationToggle'),
-        soundToggle: el('#soundNotificationToggle'),
-        tabTitleToggle: el('#tabTitleToggle'),
-        smartModeToggle: el('#smartModeToggle'),
-        soundTypeSelect: el('#soundTypeSelect'),
-        volumeSlider: el('#volumeSlider'),
-        volumeValue: el('#volumeValue'),
-        testSoundBtn: el('#testSoundBtn')
+        permissionRequestArea: el('#permissionRequestArea'),
+        permissionDeniedArea: el('#permissionDeniedArea'),
+        // 모든 UI 요소 제거됨 - 기본 알림만 사용
       };
 
       // UI 상태 업데이트
       function updateUI() {
-        const { enabled, settings, permission } = AppState.notifications;
+        const { settings, permission } = AppState.notifications;
         
         // 권한 상태에 따른 UI 조정
         if (permission === 'denied' || !('Notification' in window)) {
-          elements.requestBtn.style.display = 'none';
-          elements.browserToggle.disabled = true;
+          // 권한이 거부되었거나 지원되지 않는 경우
+          elements.permissionRequestArea.style.display = 'none';
+          elements.permissionDeniedArea.style.display = 'block';
+          // 브라우저 알림 체크박스 제거됨
         } else if (permission === 'default') {
-          elements.requestBtn.style.display = 'block';
-        } else {
-          elements.requestBtn.style.display = 'none';
+          // 권한이 아직 요청되지 않은 경우
+          elements.permissionRequestArea.style.display = 'block';
+          elements.permissionDeniedArea.style.display = 'none';
+          // 브라우저 알림 체크박스 제거됨
+        } else if (permission === 'granted') {
+          // 권한이 허용된 경우
+          elements.permissionRequestArea.style.display = 'none';
+          elements.permissionDeniedArea.style.display = 'none';
+          // 브라우저 알림 체크박스 제거됨
         }
         
-        // 체크박스 상태 동기화
-        elements.browserToggle.checked = enabled.browser;
-        elements.soundToggle.checked = enabled.sound;
-        elements.tabTitleToggle.checked = enabled.tabTitle;
-        elements.smartModeToggle.checked = enabled.smartMode;
+        // 체크박스 제거됨 - 모든 알림 항상 활성
         
-        // 소리 설정 동기화
-        elements.soundTypeSelect.value = settings.soundType;
-        elements.volumeSlider.value = Math.round(settings.soundVolume * 100);
-        elements.volumeValue.textContent = Math.round(settings.soundVolume * 100) + '%';
-        
-        // 소리 설정 활성화/비활성화
-        const soundSettings = el('#soundSettings');
-        soundSettings.style.opacity = enabled.sound ? '1' : '0.5';
-        elements.soundTypeSelect.disabled = !enabled.sound;
-        elements.volumeSlider.disabled = !enabled.sound;
-        elements.testSoundBtn.disabled = !enabled.sound;
+        // 소리 설정 UI 제거됨 - 기본값 사용
       }
 
       // 설정 저장 헬퍼
@@ -2417,88 +2397,46 @@
       // 🔔 권한 요청
       elements.requestBtn?.addEventListener('click', async () => {
         elements.requestBtn.disabled = true;
-        elements.requestBtn.innerHTML = '<span class="spinner"></span> 요청중...';
+        elements.requestBtn.innerHTML = '<span class="spinner"></span> 요청 중...';
         
-        await notificationManager.requestPermission();
+        const permission = await notificationManager.requestPermission();
         
-        // 권한이 허용되면 오디오 초기화도 시도
-        if (AppState.notifications.permission === 'granted') {
+        // 권한 요청 결과에 따른 피드백
+        if (permission === 'granted') {
+          elements.requestBtn.innerHTML = '✅ 허용됨';
+          // 오디오 초기화도 시도
           await notificationManager.initializeAudio();
+          
+          // 테스트 알림 표시
+          setTimeout(() => {
+            notificationManager.showNotification('알림 설정 완료! 🎉', {
+              body: 'Eastalk에서 새 메시지 알림을 보내드릴 수 있어요',
+              icon: '/favicon.ico'
+            });
+          }, 500);
+        } else if (permission === 'denied') {
+          elements.requestBtn.innerHTML = '❌ 거부됨';
+        } else {
+          elements.requestBtn.innerHTML = '⚠️ 취소됨';
         }
         
-        elements.requestBtn.disabled = false;
-        elements.requestBtn.innerHTML = '브라우저 알림 허용하기';
-        updateUI();
-      });
-
-      // 📱 브라우저 알림 토글
-      elements.browserToggle?.addEventListener('change', (e) => {
-        AppState.notifications.enabled.browser = e.target.checked;
-        saveAndUpdate();
-      });
-
-      // 🔊 소리 알림 토글  
-      elements.soundToggle?.addEventListener('change', async (e) => {
-        AppState.notifications.enabled.sound = e.target.checked;
-        
-        // 소리 활성화 시 오디오 초기화
-        if (e.target.checked && !notificationManager.isInitialized) {
-          await notificationManager.initializeAudio();
-        }
-        
-        saveAndUpdate();
-      });
-
-      // 🏷️ 탭 제목 토글
-      elements.tabTitleToggle?.addEventListener('change', (e) => {
-        AppState.notifications.enabled.tabTitle = e.target.checked;
-        saveAndUpdate();
-      });
-
-      // 🎯 스마트 모드 토글
-      elements.smartModeToggle?.addEventListener('change', (e) => {
-        AppState.notifications.enabled.smartMode = e.target.checked;
-        saveAndUpdate();
-      });
-
-      // 🎵 소리 종류 선택
-      elements.soundTypeSelect?.addEventListener('change', (e) => {
-        AppState.notifications.settings.soundType = e.target.value;
-        saveAndUpdate();
-      });
-
-      // 🔉 볼륨 조절
-      elements.volumeSlider?.addEventListener('input', (e) => {
-        const volume = parseInt(e.target.value) / 100;
-        AppState.notifications.settings.soundVolume = volume;
-        elements.volumeValue.textContent = e.target.value + '%';
-        saveAndUpdate();
-      });
-
-      // 🧪 소리 테스트
-      elements.testSoundBtn?.addEventListener('click', async () => {
-        // 오디오 초기화 시도
-        if (!notificationManager.isInitialized) {
-          const success = await notificationManager.initializeAudio();
-          if (!success) {
-            alert('오디오 초기화에 실패했습니다. 페이지를 새로고침 후 다시 시도해주세요.');
-            return;
-          }
-        }
-        
-        // 테스트 사운드 재생
-        notificationManager.playSound();
-        
-        // 버튼 피드백
-        const originalText = elements.testSoundBtn.innerHTML;
-        elements.testSoundBtn.innerHTML = '🔊 재생중...';
-        elements.testSoundBtn.disabled = true;
-        
+        // 1.5초 후 원래 텍스트로 복원
         setTimeout(() => {
-          elements.testSoundBtn.innerHTML = originalText;
-          elements.testSoundBtn.disabled = false;
-        }, 1000);
+          elements.requestBtn.disabled = false;
+          elements.requestBtn.innerHTML = '🔔 브라우저 알림 허용하기';
+          updateUI();
+        }, 1500);
       });
+
+      // 브라우저 알림 및 소리 알림 체크박스 제거됨 - 항상 활성
+
+      // 탭 제목 및 스마트 모드 체크박스 제거됨 - 항상 활성
+
+      // 소리 종류 선택 제거됨
+
+      // 볼륨 조절 제거됨
+
+      // 소리 테스트 제거됨
 
       // 초기 UI 상태 설정
       updateUI();

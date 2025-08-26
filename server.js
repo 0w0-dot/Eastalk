@@ -29,7 +29,7 @@ const io = socketIO(server, {
 });
 
 // 🎯 Render 최적화 설정
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 const isProduction = process.env.NODE_ENV === 'production';
 
 // Render 프록시 신뢰 설정 (Rate Limiter 오류 해결)

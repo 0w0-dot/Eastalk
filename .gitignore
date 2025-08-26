@@ -50,6 +50,7 @@ browser-state-*.fingerprint
 
 # Development documentation (private)
 docs/
+!docs/project_plan.md
 TESTING_GUIDE.md
 DEPLOYMENT_LOG.md
 
