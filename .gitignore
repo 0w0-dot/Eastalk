@@ -43,3 +43,15 @@ DEPLOY.md
 CLAUDE.md
 CLAUDE.md.md
 .claude/
+
+# Browser state files (MCP Playwright)
+browser-state-*.json
+browser-state-*.fingerprint
+
+# Development documentation (private)
+docs/
+TESTING_GUIDE.md
+DEPLOYMENT_LOG.md
+
+# Render deployment configs (may contain sensitive info)
+render*.yaml
