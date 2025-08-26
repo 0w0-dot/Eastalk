@@ -8,6 +8,7 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const cron = require('node-cron');
+const webpush = require('web-push');
 
 require('dotenv').config();
 
@@ -31,6 +32,18 @@ const io = socketIO(server, {
 // 🎯 Render 최적화 설정
 const PORT = process.env.PORT || 3001;
 const isProduction = process.env.NODE_ENV === 'production';
+
+// 🔔 VAPID 키 설정 (Web Push)
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || 'BG3zVpPIzzIaAkcJNu8gPIns8VcZXxVR4F0F30_qGPFAhJLtKhcMPEGP9Vh-j8VQxcdRrawnYlLP3i3NfsUzMYc';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '65iALnW23Qkhie9XUANTnv7ShJLQ_lkjOLiEQDwdYu0';
+const VAPID_EMAIL = process.env.VAPID_EMAIL || 'mailto:admin@eastalk.com';
+
+// Web Push 설정
+webpush.setVapidDetails(
+  VAPID_EMAIL,
+  VAPID_PUBLIC_KEY,
+  VAPID_PRIVATE_KEY
+);
 
 // Render 프록시 신뢰 설정 (Rate Limiter 오류 해결)
 app.set('trust proxy', 1);
@@ -148,11 +161,28 @@ MessageSchema.index({ room: 1, ts: 1 });  // 방별 시간 오름차순 (과거 
 MessageSchema.index({ mid: 1 });          // 메시지 ID 조회 (중복 방지용)
 MessageSchema.index({ userId: 1, ts: -1 }); // 사용자별 메시지 조회용
 
+// 🔔 Push 구독 스키마 정의
+const PushSubscriptionSchema = new mongoose.Schema({
+  userId: { type: String, required: true },
+  endpoint: { type: String, required: true },
+  keys: {
+    p256dh: { type: String, required: true },
+    auth: { type: String, required: true }
+  },
+  userAgent: String,
+  isActive: { type: Boolean, default: true },
+  lastUsed: { type: Date, default: Date.now }
+}, { timestamps: true });
+
+// 중복 방지를 위한 인덱스 설정
+PushSubscriptionSchema.index({ userId: 1, endpoint: 1 }, { unique: true });
+
 // 데이터베이스 모델 (메모리 모드가 아니면)
-let User, Message;
+let User, Message, PushSubscription;
 if (!USE_MEMORY_DB) {
   User = mongoose.model('User', UserSchema);
   Message = mongoose.model('Message', MessageSchema);
+  PushSubscription = mongoose.model('PushSubscription', PushSubscriptionSchema);
 }
 
 // 상수
@@ -635,6 +665,18 @@ app.post('/api/messages', async (req, res) => {
     // Socket.io로 실시간 전송
     io.to(room).emit('newMessage', result);
     
+    // 🔔 Push 알림 전송 (비동기)
+    sendPushNotifications({
+      userId: userId,
+      nickname: result.nickname,
+      text: sanitizedText,
+      room: room,
+      mid: mid,
+      ts: ts
+    }).catch(error => {
+      console.error('Push 알림 전송 오류:', error);
+    });
+    
     res.json(result);
   } catch (error) {
     console.error('메시지 전송 오류:', error);
@@ -867,6 +909,18 @@ app.post('/api/upload', async (req, res) => {
     
     // Socket.io로 실시간 전송 (성능 최적화: 이미지 메시지는 binary 허용)
     io.to(room).emit('newMessage', result);
+    
+    // 🔔 Push 알림 전송 (이미지 메시지)
+    sendPushNotifications({
+      userId: userId,
+      nickname: result.nickname,
+      text: '📷 이미지를 전송했습니다',
+      room: room,
+      mid: mid,
+      ts: ts
+    }).catch(error => {
+      console.error('Push 알림 전송 오류:', error);
+    });
     
     res.json(result);
   } catch (error) {
@@ -1411,6 +1465,187 @@ process.on('SIGINT', () => {
     });
   });
 });
+
+// 🔔 Push 구독 저장 API
+app.post('/api/push-subscribe', async (req, res) => {
+  try {
+    const { subscription, userId, userAgent } = req.body;
+
+    // 입력 검증
+    if (!subscription || !subscription.endpoint || !subscription.keys) {
+      return res.status(400).json({ error: '구독 정보가 올바르지 않습니다' });
+    }
+
+    if (!userId || typeof userId !== 'string') {
+      return res.status(400).json({ error: '사용자 ID가 필요합니다' });
+    }
+
+    console.log(`🔔 Push 구독 저장 요청 - 사용자: ${userId}`);
+
+    if (!USE_MEMORY_DB) {
+      // MongoDB에 구독 정보 저장 (중복 시 업데이트)
+      await PushSubscription.findOneAndUpdate(
+        { 
+          userId: userId,
+          endpoint: subscription.endpoint 
+        },
+        {
+          userId: userId,
+          endpoint: subscription.endpoint,
+          keys: {
+            p256dh: subscription.keys.p256dh,
+            auth: subscription.keys.auth
+          },
+          userAgent: userAgent || 'Unknown',
+          isActive: true,
+          lastUsed: new Date()
+        },
+        { 
+          upsert: true, 
+          new: true 
+        }
+      );
+
+      console.log(`✅ Push 구독 저장됨 - 사용자: ${userId}`);
+    } else {
+      // 메모리 모드에서는 간단히 로그만
+      console.log(`📋 메모리 모드 - Push 구독 기록: ${userId}`);
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Push 구독이 저장되었습니다' 
+    });
+
+  } catch (error) {
+    console.error('❌ Push 구독 저장 오류:', error);
+    
+    if (error.code === 11000) {
+      // 중복 키 오류 - 이미 존재하는 구독
+      res.json({ 
+        success: true, 
+        message: '이미 구독된 사용자입니다' 
+      });
+    } else {
+      res.status(500).json({ 
+        error: 'Push 구독 저장 실패',
+        details: error.message 
+      });
+    }
+  }
+});
+
+// 🔔 Push 구독 해제 API
+app.post('/api/push-unsubscribe', async (req, res) => {
+  try {
+    const { userId, endpoint } = req.body;
+
+    if (!userId || !endpoint) {
+      return res.status(400).json({ error: '사용자 ID와 endpoint가 필요합니다' });
+    }
+
+    if (!USE_MEMORY_DB) {
+      await PushSubscription.findOneAndUpdate(
+        { userId: userId, endpoint: endpoint },
+        { isActive: false },
+        { new: true }
+      );
+    }
+
+    console.log(`🔕 Push 구독 해제됨 - 사용자: ${userId}`);
+    res.json({ 
+      success: true, 
+      message: 'Push 구독이 해제되었습니다' 
+    });
+
+  } catch (error) {
+    console.error('❌ Push 구독 해제 오류:', error);
+    res.status(500).json({ 
+      error: 'Push 구독 해제 실패',
+      details: error.message 
+    });
+  }
+});
+
+// 🔔 Push 알림 전송 함수
+async function sendPushNotifications(messageData) {
+  if (USE_MEMORY_DB) {
+    console.log('📋 메모리 모드 - Push 알림 전송 스킵');
+    return;
+  }
+
+  try {
+    // 해당 방의 모든 활성 구독자 조회 (메시지 발송자 제외)
+    const subscriptions = await PushSubscription.find({
+      isActive: true
+    }).select('userId endpoint keys userAgent');
+
+    if (subscriptions.length === 0) {
+      console.log('📭 Push 구독자가 없습니다');
+      return;
+    }
+
+    console.log(`📤 ${subscriptions.length}명에게 Push 알림 전송 중...`);
+
+    const pushPromises = subscriptions.map(async (sub) => {
+      // 자신에게는 푸시 알림을 보내지 않음
+      if (sub.userId === messageData.userId) {
+        return null;
+      }
+
+      try {
+        const pushSubscription = {
+          endpoint: sub.endpoint,
+          keys: {
+            p256dh: sub.keys.p256dh,
+            auth: sub.keys.auth
+          }
+        };
+
+        const payload = JSON.stringify({
+          title: 'Eastalk',
+          body: messageData.text || '새 메시지',
+          sender: messageData.nickname,
+          room: messageData.room,
+          messageId: messageData.mid,
+          timestamp: messageData.ts
+        });
+
+        await webpush.sendNotification(pushSubscription, payload);
+        console.log(`✅ Push 전송 성공 - 사용자: ${sub.userId}`);
+
+        // 마지막 사용 시간 업데이트
+        await PushSubscription.findByIdAndUpdate(sub._id, {
+          lastUsed: new Date()
+        });
+
+        return { success: true, userId: sub.userId };
+
+      } catch (error) {
+        console.error(`❌ Push 전송 실패 - 사용자: ${sub.userId}:`, error);
+
+        // 410 Gone - 구독이 더 이상 유효하지 않음
+        if (error.statusCode === 410) {
+          console.log(`🗑️ 만료된 구독 제거 - 사용자: ${sub.userId}`);
+          await PushSubscription.findByIdAndUpdate(sub._id, {
+            isActive: false
+          });
+        }
+
+        return { success: false, userId: sub.userId, error: error.message };
+      }
+    });
+
+    const results = await Promise.all(pushPromises);
+    const successful = results.filter(r => r && r.success).length;
+    const failed = results.filter(r => r && !r.success).length;
+
+    console.log(`📊 Push 전송 결과: 성공 ${successful}개, 실패 ${failed}개`);
+
+  } catch (error) {
+    console.error('❌ Push 알림 전송 오류:', error);
+  }
+}
 
 // 🔍 Render 배포 상태 체크 엔드포인트
 app.get('/api/status', async (req, res) => {

@@ -4,6 +4,18 @@
   <meta charset="utf-8" />
   <title>Eastalk (Web)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  
+  <!-- PWA 매니페스트 -->
+  <link rel="manifest" href="/manifest.json" />
+  
+  <!-- PWA 아이콘 및 메타 태그 -->
+  <link rel="icon" href="/favicon.ico" />
+  <link rel="apple-touch-icon" href="/favicon.ico" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Eastalk" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#007bff" />
   <style>
     /* ===== Design Tokens ===== */
     :root{
@@ -702,6 +714,12 @@
         this.soundBuffers = new Map();
         this.isInitialized = false;
         
+        // 🔔 Push 구독 관련 속성
+        this.pushSupported = false;
+        this.subscription = null;
+        this.serviceWorkerRegistration = null;
+        this.vapidPublicKey = 'BG3zVpPIzzIaAkcJNu8gPIns8VcZXxVR4F0F30_qGPFAhJLtKhcMPEGP9Vh-j8VQxcdRrawnYlLP3i3NfsUzMYc';
+        
         // 기본 사운드 URL들 (Data URL로 임베드된 소리들)
         this.soundUrls = {
           ding: 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEWAhqO2u7NfS0HLYnS9t2QQQ0PXrjs4ahWFQ1Bnt_y2mkzAhqO2u7NfS0HLYnS9t2QQQwPZLHl34RGAhqO2u7NfS0HLYnS9t2QQQwPZLHl34RHBAQR',
@@ -843,14 +861,16 @@
         }
       }
 
-      // 🔔 브라우저 푸시 알림 표시
+      // 🔔 브라우저 알림 표시 (Push API와 기존 API 통합)
       showNotification(title, options = {}) {
         if (AppState.notifications.permission !== 'granted') {
+          console.warn('⚠️ 알림 권한이 없어 알림을 표시할 수 없습니다');
           return;
         }
 
         // 스마트 모드: 탭이 활성화되어 있으면 알림 표시 안 함 (항상 활성)
         if (AppState.notifications.state.isTabVisible) {
+          console.log('📋 탭이 활성화되어 있어 알림을 표시하지 않습니다');
           return;
         }
 
@@ -864,8 +884,56 @@
           ...options
         };
 
+        // Push API 지원 여부에 따라 처리 방식 결정
+        if (this.pushSupported && this.serviceWorkerRegistration) {
+          // Push API가 지원되는 경우: Service Worker를 통한 알림 표시
+          this.showPushNotification(title, defaultOptions);
+        } else {
+          // 기존 방식: 직접 Notification API 사용
+          this.showDirectNotification(title, defaultOptions);
+        }
+      }
+
+      // 🔔 Service Worker를 통한 Push 알림 표시
+      async showPushNotification(title, options) {
         try {
-          const notification = new Notification(title, defaultOptions);
+          if (!this.serviceWorkerRegistration) {
+            console.warn('⚠️ Service Worker가 등록되지 않았습니다');
+            this.showDirectNotification(title, options);
+            return;
+          }
+
+          await this.serviceWorkerRegistration.showNotification(title, {
+            ...options,
+            actions: [
+              {
+                action: 'open',
+                title: '열기'
+              },
+              {
+                action: 'close', 
+                title: '닫기'
+              }
+            ],
+            data: {
+              timestamp: Date.now(),
+              source: 'eastalk-web'
+            }
+          });
+
+          console.log('✅ Push 알림 표시됨 (Service Worker)');
+
+        } catch (error) {
+          console.error('❌ Push 알림 표시 실패:', error);
+          // Fallback: 기존 방식 사용
+          this.showDirectNotification(title, options);
+        }
+      }
+
+      // 🔔 직접 Notification API를 통한 알림 표시
+      showDirectNotification(title, options) {
+        try {
+          const notification = new Notification(title, options);
           
           // 알림 클릭 시 창 포커스
           notification.onclick = () => {
@@ -877,9 +945,11 @@
           setTimeout(() => {
             notification.close();
           }, 5000);
-          
+
+          console.log('✅ 직접 알림 표시됨 (Notification API)');
+
         } catch (error) {
-          console.error('❌ 알림 표시 실패:', error);
+          console.error('❌ 직접 알림 표시 실패:', error);
         }
       }
 
@@ -952,8 +1022,183 @@
         }
       }
 
+      // 🔔 Push 지원 확인
+      checkPushSupport() {
+        if (!('serviceWorker' in navigator)) {
+          console.warn('⚠️ Service Worker 미지원');
+          return false;
+        }
+        
+        if (!('PushManager' in window)) {
+          console.warn('⚠️ Push Manager 미지원');
+          return false;
+        }
+        
+        if (!('Notification' in window)) {
+          console.warn('⚠️ Notification API 미지원');
+          return false;
+        }
+        
+        this.pushSupported = true;
+        console.log('✅ Push API 지원됨');
+        return true;
+      }
+
+      // 🔧 Service Worker 등록
+      async registerServiceWorker() {
+        if (!this.pushSupported) return null;
+        
+        try {
+          const registration = await navigator.serviceWorker.register('/sw.js');
+          console.log('✅ Service Worker 등록 성공:', registration.scope);
+          
+          this.serviceWorkerRegistration = registration;
+          return registration;
+        } catch (error) {
+          console.error('❌ Service Worker 등록 실패:', error);
+          return null;
+        }
+      }
+
+      // 📋 Base64 URL을 Uint8Array로 변환
+      urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding)
+          .replace(/\-/g, '+')
+          .replace(/_/g, '/');
+
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+
+        for (let i = 0; i < rawData.length; ++i) {
+          outputArray[i] = rawData.charCodeAt(i);
+        }
+        return outputArray;
+      }
+
+      // 📱 Push 구독 생성
+      async subscribeToPush() {
+        if (!this.serviceWorkerRegistration) {
+          console.warn('⚠️ Service Worker가 등록되지 않았습니다');
+          return null;
+        }
+
+        try {
+          // VAPID 공개키를 Uint8Array로 변환
+          const applicationServerKey = this.urlBase64ToUint8Array(this.vapidPublicKey);
+          
+          // Push 구독 생성
+          const subscription = await this.serviceWorkerRegistration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: applicationServerKey
+          });
+
+          console.log('✅ Push 구독 생성됨:', subscription);
+          this.subscription = subscription;
+          
+          // 서버에 구독 정보 저장
+          await this.sendSubscriptionToServer(subscription);
+          
+          return subscription;
+        } catch (error) {
+          console.error('❌ Push 구독 실패:', error);
+          return null;
+        }
+      }
+
+      // 🌐 서버에 구독 정보 전송
+      async sendSubscriptionToServer(subscription) {
+        try {
+          const response = await fetch('/api/push-subscribe', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              subscription: subscription,
+              userId: AppState.userId || 'anonymous',
+              userAgent: navigator.userAgent,
+              timestamp: new Date().toISOString()
+            })
+          });
+
+          if (response.ok) {
+            console.log('✅ 구독 정보 서버 전송 완료');
+            return true;
+          } else {
+            console.error('❌ 구독 정보 서버 전송 실패:', response.status);
+            return false;
+          }
+        } catch (error) {
+          console.error('❌ 구독 정보 전송 오류:', error);
+          return false;
+        }
+      }
+
+      // 🔄 기존 구독 확인
+      async checkExistingSubscription() {
+        if (!this.serviceWorkerRegistration) return null;
+
+        try {
+          const subscription = await this.serviceWorkerRegistration.pushManager.getSubscription();
+          if (subscription) {
+            console.log('✅ 기존 구독 발견:', subscription);
+            this.subscription = subscription;
+            return subscription;
+          }
+          return null;
+        } catch (error) {
+          console.error('❌ 기존 구독 확인 실패:', error);
+          return null;
+        }
+      }
+
+      // 🔔 Push 알림 초기화 (전체 프로세스)
+      async initPushNotifications() {
+        console.log('🚀 Push 알림 초기화 시작...');
+
+        // 1. 브라우저 지원 확인
+        if (!this.checkPushSupport()) {
+          console.warn('⚠️ Push 알림 미지원, 기존 방식 사용');
+          return false;
+        }
+
+        // 2. Service Worker 등록
+        const registration = await this.registerServiceWorker();
+        if (!registration) {
+          console.error('❌ Service Worker 등록 실패');
+          return false;
+        }
+
+        // 3. 알림 권한 요청
+        const permission = await this.requestPermission();
+        if (permission !== 'granted') {
+          console.warn('⚠️ 알림 권한 거부됨');
+          return false;
+        }
+
+        // 4. 기존 구독 확인
+        let subscription = await this.checkExistingSubscription();
+        
+        // 5. 새 구독 생성 (기존 구독이 없는 경우)
+        if (!subscription) {
+          subscription = await this.subscribeToPush();
+        } else {
+          // 기존 구독을 서버에 다시 전송 (서버 재시작 등을 고려)
+          await this.sendSubscriptionToServer(subscription);
+        }
+
+        if (subscription) {
+          console.log('🎉 Push 알림 초기화 완료!');
+          return true;
+        } else {
+          console.error('❌ Push 구독 실패');
+          return false;
+        }
+      }
+
       // 🚀 초기화
-      init() {
+      async init() {
         // 설정 로드
         this.loadSettings();
         
@@ -964,6 +1209,11 @@
         
         // 초기 상태 설정
         this.handleVisibilityChange();
+        
+        // Push 알림 초기화 (비동기)
+        this.initPushNotifications().catch(error => {
+          console.error('❌ Push 알림 초기화 실패:', error);
+        });
         
         console.log('🔔 NotificationManager 초기화 완료');
       }
