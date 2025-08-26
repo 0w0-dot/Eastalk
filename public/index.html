@@ -198,11 +198,23 @@
     .reply-btn:hover{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
     .msg-row:hover .reply-btn{ opacity:1; }
     
-    /* 답글 대상 표시 */
+    /* 답글 대상 표시 (카카오톡 스타일) */
     .reply-target{
       font-size:12px; color:var(--muted); margin-bottom:4px; 
-      padding:4px 6px; background:rgba(0,0,0,.05); border-radius:6px;
-      border-left:3px solid var(--accent);
+      padding:6px 8px; background:#f8f9fa; border-radius:6px;
+      border-left:3px solid var(--accent); cursor:pointer;
+      transition:background-color .2s ease;
+    }
+    .reply-target:hover{
+      background:#e9ecef;
+    }
+    .reply-target .original-user{
+      color:var(--text); font-weight:500;
+    }
+    .reply-target .original-content{
+      display:block; margin-top:2px; color:var(--muted);
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+      max-width:200px;
     }
     .meta{ font-size:11px; color:var(--muted); margin-top:6px; }
 
@@ -1813,6 +1825,49 @@
           isAtBottom: this.isAtBottom(),
           scrollPercentage: maxScroll > 0 ? Math.round((container.scrollTop / maxScroll) * 100) : 100
         };
+      },
+      
+      // 특정 메시지로 스크롤하고 하이라이트
+      scrollToMessage(messageId, highlight = true) {
+        const targetElement = document.querySelector(`[data-mid="${messageId}"]`);
+        if (!targetElement) {
+          console.warn(`메시지를 찾을 수 없습니다: ${messageId}`);
+          return false;
+        }
+        
+        const container = this.getScrollContainer();
+        if (!container) return false;
+        
+        // 메시지 요소의 위치 계산
+        const containerRect = container.getBoundingClientRect();
+        const targetRect = targetElement.getBoundingClientRect();
+        
+        // 스크롤할 위치 계산 (메시지를 중앙에 배치)
+        const scrollTop = container.scrollTop + targetRect.top - containerRect.top - (containerRect.height / 2) + (targetRect.height / 2);
+        
+        // 부드럽게 스크롤
+        if ('scrollTo' in container) {
+          container.scrollTo({
+            top: Math.max(0, scrollTop),
+            behavior: 'smooth'
+          });
+        } else {
+          container.scrollTop = Math.max(0, scrollTop);
+        }
+        
+        // 하이라이트 효과
+        if (highlight) {
+          targetElement.style.transition = 'background-color 0.3s ease';
+          targetElement.style.backgroundColor = '#fff3cd';
+          setTimeout(() => {
+            targetElement.style.backgroundColor = '';
+            setTimeout(() => {
+              targetElement.style.transition = '';
+            }, 300);
+          }, 1000);
+        }
+        
+        return true;
       }
     };
 
@@ -2261,10 +2316,16 @@
           // 비동기로 서버에서 메시지 정보 조회
           fetchMessageInfo(m.replyTo).then(messageInfo => {
             if (messageInfo && messageInfo.nickname) {
-              // DOM 업데이트
+              // DOM 업데이트 - 카카오톡 스타일 미리보기로 변경
               const replyTargetEl = document.querySelector(`[data-mid="${m.mid}"] .reply-target`);
               if (replyTargetEl) {
-                replyTargetEl.textContent = `↳ ${messageInfo.nickname}님에게 답글`;
+                const originalContent = messageInfo.text || '메시지';
+                replyTargetEl.innerHTML = `
+                  <span class="original-user">${messageInfo.nickname}</span>
+                  <span class="original-content">${originalContent}</span>
+                `;
+                replyTargetEl.setAttribute('data-reply-to', m.replyTo);
+                replyTargetEl.setAttribute('onclick', `scrollToMessage('${m.replyTo}')`);
                 console.log(`🔍 서버에서 답글 대상 찾음: ${messageInfo.nickname}`);
               }
             }
@@ -2273,12 +2334,37 @@
             // 최후의 fallback
             const replyTargetEl = document.querySelector(`[data-mid="${m.mid}"] .reply-target`);
             if (replyTargetEl) {
-              replyTargetEl.textContent = `↳ 알 수 없는 사용자님에게 답글`;
+              replyTargetEl.innerHTML = `
+                <span class="original-user">알 수 없는 사용자</span>
+                <span class="original-content">메시지</span>
+              `;
             }
           });
         }
         
-        replyTargetHtml = `<div class="reply-target">↳ ${targetName}님에게 답글</div>`;
+        // 원본 메시지 내용 가져오기
+        let originalContent = m.replyToText || '';
+        if (!originalContent) {
+          // 캐시에서 원본 메시지 내용 찾기
+          const targetMessage = AppState.cache.renderedMids[AppState.currentRoom].get(m.replyTo);
+          if (targetMessage && targetMessage.text) {
+            originalContent = targetMessage.text;
+          } else {
+            // DOM에서 원본 메시지 내용 찾기
+            const targetElement = document.querySelector(`[data-mid="${m.replyTo}"] .bubble-text`);
+            if (targetElement) {
+              originalContent = targetElement.textContent;
+            }
+          }
+        }
+        
+        // 카카오톡 스타일 미리보기 HTML 생성
+        replyTargetHtml = `
+          <div class="reply-target" data-reply-to="${m.replyTo}" onclick="scrollToMessage('${m.replyTo}')">
+            <span class="original-user">${targetName}</span>
+            <span class="original-content">${originalContent || '메시지'}</span>
+          </div>
+        `;
         row.classList.add('reply');
         // 스레드 연결선 표시
         if (!isMe) {
@@ -3020,6 +3106,16 @@
       
       console.log('🔔 알림 설정 UI 초기화 완료');
     }
+
+    // 🔗 전역 스크롤 네비게이션 함수
+    window.scrollToMessage = function(messageId) {
+      if (ScrollManager && ScrollManager.scrollToMessage) {
+        return ScrollManager.scrollToMessage(messageId);
+      } else {
+        console.warn('ScrollManager가 아직 초기화되지 않았습니다.');
+        return false;
+      }
+    };
   </script>
 </body>
 </html>

@@ -184,6 +184,8 @@ const MessageSchema = new mongoose.Schema({
   reactions: { type: Object, default: {} },
   // 🔗 대댓글/스레드 지원
   replyTo: { type: String, default: null }, // 답글 대상 메시지 ID
+  replyToNickname: { type: String, default: null }, // 답글 대상 사용자 닉네임
+  replyToText: { type: String, default: null }, // 답글 대상 메시지 내용 미리보기
   thread: { type: String, default: null }   // 스레드 그룹 ID (최상위 메시지 ID)
 }, { timestamps: true });
 
@@ -667,6 +669,7 @@ app.post('/api/messages', async (req, res) => {
     // 🔗 답글 처리 로직
     let threadId = null;
     let replyToNickname = null;
+    let replyToText = null;
     if (replyTo) {
       let parentMessage;
       if (USE_MEMORY_DB) {
@@ -678,8 +681,9 @@ app.post('/api/messages', async (req, res) => {
       if (parentMessage) {
         // 부모 메시지에 thread가 있으면 사용, 없으면 부모 메시지 ID를 thread로 설정
         threadId = parentMessage.thread || parentMessage.mid;
-        // 답글 대상의 닉네임 저장
+        // 답글 대상의 닉네임과 텍스트 내용 저장
         replyToNickname = parentMessage.nickname;
+        replyToText = parentMessage.text || '파일'; // 텍스트가 없으면 '파일'로 표시
       }
     }
     
@@ -697,6 +701,7 @@ app.post('/api/messages', async (req, res) => {
       reactions: {},
       replyTo: replyTo || null,
       replyToNickname: replyToNickname,
+      replyToText: replyToText,
       thread: threadId
     };
     
@@ -720,6 +725,7 @@ app.post('/api/messages', async (req, res) => {
       reactions: message.reactions,
       replyTo: message.replyTo,
       replyToNickname: message.replyToNickname,
+      replyToText: message.replyToText,
       thread: message.thread
     };
     
@@ -851,6 +857,7 @@ app.get('/api/messages/:room', async (req, res) => {
       reactions: m.reactions,
       replyTo: m.replyTo,
       replyToNickname: m.replyToNickname,
+      replyToText: m.replyToText,
       thread: m.thread
     }));
     
@@ -911,6 +918,7 @@ app.get('/api/messages/single/:messageId', async (req, res) => {
       reactions: message.reactions,
       replyTo: message.replyTo,
       replyToNickname: message.replyToNickname,
+      replyToText: message.replyToText,
       thread: message.thread
     };
     
