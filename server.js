@@ -17,6 +17,14 @@ const io = socketIO(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
+  },
+  // 성능 최적화 설정
+  pingInterval: 15000,  // 기본 25초 → 15초로 단축
+  pingTimeout: 10000,   // 기본 20초 → 10초로 단축
+  // Connection State Recovery 활성화
+  connectionStateRecovery: {
+    maxDisconnectionDuration: 2 * 60 * 1000, // 2분간 상태 보존
+    skipMiddlewares: true
   }
 });
 
@@ -78,9 +86,17 @@ if (USE_MEMORY_DB) {
     serverSelectionTimeoutMS: 5000,
     socketTimeoutMS: 45000,
   })
-  .then(() => {
+  .then(async () => {
     console.log('✅ MongoDB 연결 성공');
     console.log(`🌍 환경: ${process.env.NODE_ENV || 'development'}`);
+    
+    // 인덱스 상태 확인 및 로깅
+    try {
+      const messageIndexes = await Message.collection.getIndexes();
+      console.log('📊 Message 컬렉션 인덱스:', Object.keys(messageIndexes));
+    } catch (error) {
+      console.log('⚠️ 인덱스 정보 조회 실패 (정상적일 수 있음):', error.message);
+    }
   })
   .catch(err => {
     console.error('❌ MongoDB 연결 실패:', err);
@@ -125,6 +141,12 @@ const MessageSchema = new mongoose.Schema({
   mid: { type: String, unique: true, required: true },
   reactions: { type: Object, default: {} }
 }, { timestamps: true });
+
+// 성능 최적화 인덱스 생성
+MessageSchema.index({ room: 1, ts: -1 }); // 방별 시간순 정렬 (메인 쿼리)
+MessageSchema.index({ room: 1, ts: 1 });  // 방별 시간 오름차순 (과거 메시지 조회용)
+MessageSchema.index({ mid: 1 });          // 메시지 ID 조회 (중복 방지용)
+MessageSchema.index({ userId: 1, ts: -1 }); // 사용자별 메시지 조회용
 
 // 데이터베이스 모델 (메모리 모드가 아니면)
 let User, Message;
@@ -610,8 +632,8 @@ app.post('/api/messages', async (req, res) => {
       reactions: message.reactions
     };
     
-    // Socket.io로 실시간 전송
-    io.to(room).emit('newMessage', result);
+    // Socket.io로 실시간 전송 (성능 최적화: 텍스트 메시지는 binary scan 생략)
+    io.binary(false).to(room).emit('newMessage', result);
     
     res.json(result);
   } catch (error) {
@@ -623,29 +645,79 @@ app.post('/api/messages', async (req, res) => {
 app.get('/api/messages/:room', async (req, res) => {
   try {
     const { room } = req.params;
-    const { since } = req.query;
+    const { since, before, limit = '100', page = '1' } = req.query;
     
     if (!ROOMS.includes(room)) {
       return res.status(400).json({ error: 'Invalid room' });
     }
     
-    let messages;
+    const limitNum = Math.min(Number(limit), 100); // 최대 100개로 제한
+    const pageNum = Math.max(Number(page), 1);
+    
+    let messages, hasMore = false, oldestTimestamp = null;
+    
     if (USE_MEMORY_DB) {
       const allMessages = await MemoryDB.findMessages({ room });
-      const sinceNum = since ? Number(since) : 0;
-      messages = allMessages.filter(m => m.ts > sinceNum).slice(-50);
+      
+      if (since) {
+        // 증분 로드 (기존 로직)
+        const sinceNum = Number(since);
+        messages = allMessages.filter(m => m.ts > sinceNum).slice(-50);
+      } else if (before) {
+        // 과거 메시지 로드 (무한 스크롤용)
+        const beforeNum = Number(before);
+        const filteredMessages = allMessages
+          .filter(m => m.ts < beforeNum)
+          .sort((a, b) => b.ts - a.ts)
+          .slice(0, limitNum);
+        
+        messages = filteredMessages.reverse();
+        hasMore = filteredMessages.length === limitNum;
+        oldestTimestamp = messages[0]?.ts || null;
+      } else {
+        // 최초 로드 (최신 메시지)
+        const latestMessages = allMessages
+          .sort((a, b) => b.ts - a.ts)
+          .slice(0, limitNum);
+        
+        messages = latestMessages.reverse();
+        hasMore = allMessages.length > limitNum;
+        oldestTimestamp = messages[0]?.ts || null;
+      }
     } else {
       let query = { room };
+      
       if (since) {
+        // 증분 로드 (기존 로직)
         query.ts = { $gt: Number(since) };
+        const foundMessages = await Message.find(query)
+          .sort({ ts: -1 })
+          .limit(SCAN_LIMIT);
+        
+        messages = foundMessages.reverse().slice(-50);
+      } else if (before) {
+        // 과거 메시지 로드 (무한 스크롤용)
+        query.ts = { $lt: Number(before) };
+        const foundMessages = await Message.find(query)
+          .sort({ ts: -1 })
+          .limit(limitNum);
+        
+        messages = foundMessages.reverse();
+        hasMore = foundMessages.length === limitNum;
+        oldestTimestamp = messages[0]?.ts || null;
+      } else {
+        // 최초 로드 (최신 메시지)
+        const foundMessages = await Message.find(query)
+          .sort({ ts: -1 })
+          .limit(limitNum);
+        
+        messages = foundMessages.reverse();
+        
+        // hasMore 계산: limitNum개를 가져왔다면 더 있을 수 있음
+        const totalCount = await Message.countDocuments(query);
+        hasMore = totalCount > limitNum;
+        oldestTimestamp = messages[0]?.ts || null;
       }
-      
-      const foundMessages = await Message.find(query)
-        .sort({ ts: -1 })
-        .limit(SCAN_LIMIT);
-      
-      // 최근 50개만 가져오기
-      messages = foundMessages.reverse().slice(-50);
     }
     
     // 사용자 정보와 합치기
@@ -676,7 +748,12 @@ app.get('/api/messages/:room', async (req, res) => {
       reactions: m.reactions
     }));
     
-    res.json(result);
+    // 페이징 메타데이터와 함께 응답
+    res.json({
+      messages: result,
+      hasMore: hasMore || false,
+      oldestTimestamp: oldestTimestamp
+    });
   } catch (error) {
     console.error('메시지 조회 오류:', error);
     res.status(500).json({ error: error.message });
@@ -788,7 +865,7 @@ app.post('/api/upload', async (req, res) => {
       reactions: message.reactions
     };
     
-    // Socket.io로 실시간 전송
+    // Socket.io로 실시간 전송 (성능 최적화: 이미지 메시지는 binary 허용)
     io.to(room).emit('newMessage', result);
     
     res.json(result);
@@ -870,8 +947,8 @@ app.post('/api/reactions', async (req, res) => {
       reactions: message.reactions
     };
     
-    // Socket.io로 실시간 전송
-    io.to(message.room).emit('reactionUpdate', result);
+    // Socket.io로 실시간 전송 (성능 최적화: 반응 데이터는 binary scan 생략)
+    io.binary(false).to(message.room).emit('reactionUpdate', result);
     
     res.json(result);
   } catch (error) {

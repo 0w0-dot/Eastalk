@@ -223,6 +223,33 @@
       border-right-color:#404040; border-bottom-color:#404040;
     }
 
+    /* ===== Load More Button ===== */
+    .messages-container{ position: relative; flex: 1; overflow: hidden; }
+    .load-more-btn{
+      position: sticky; top: 0; z-index: 10;
+      width: 100%; padding: 8px 16px; margin-bottom: 8px;
+      background: var(--card-bg); border: 1px solid var(--line);
+      border-radius: 8px; color: var(--accent);
+      font-size: 13px; font-weight: 500;
+      cursor: pointer; transition: all 0.2s ease;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .load-more-btn:hover{ background: var(--hover-bg); }
+    .load-more-btn:disabled{ opacity: 0.6; cursor: not-allowed; }
+    .load-more-spinner{ font-size: 12px; }
+    
+    /* Win98 스타일 */
+    body.win98 .load-more-btn{
+      background: #c0c0c0; color: #000;
+      border: 2px solid #c0c0c0;
+      border-top-color: #fff; border-left-color: #fff;
+      border-right-color: #404040; border-bottom-color: #404040;
+    }
+    body.win98 .load-more-btn:hover{
+      border-top-color: #404040; border-left-color: #404040;
+      border-right-color: #fff; border-bottom-color: #fff;
+    }
+
     /* ===== Connected Users ===== */
     .connected-users{ margin-top:16px; }
     .connected-header{ font-size:12px; color:var(--muted); margin-bottom:8px; font-weight:500; }
@@ -371,7 +398,13 @@
     <!-- RIGHT -->
     <section class="right">
       <div class="tabs" id="tabs"></div>
-      <div class="messages" id="messages"></div>
+      <div class="messages-container">
+        <button id="loadMoreBtn" class="load-more-btn" style="display: none;">
+          <span class="load-more-text">100개 더 보기</span>
+          <span class="load-more-spinner" style="display: none;">⏳</span>
+        </button>
+        <div class="messages" id="messages"></div>
+      </div>
 
       <div class="composer">
         <input id="text" class="input" placeholder="메시지 입력 (Enter 전송, Shift+Enter 줄바꿈)" disabled />
@@ -440,7 +473,8 @@
       me: null,
       flags: {
         sending: false,
-        uploading: false
+        uploading: false,
+        switching: false  // 방 전환 중 플래그 추가
       },
       cache: {
         renderedMids: { 
@@ -728,6 +762,9 @@
       switchRoom: (nextRoom) => {
         if (nextRoom === AppState.currentRoom) return;
         
+        // 방 전환 중이면 무시 (연속 클릭 방지)
+        if (AppState.flags.switching) return;
+        
         // 입력 검증
         if (!CONFIG.ROOMS.includes(nextRoom)) {
           console.warn('잘못된 방 이름:', nextRoom);
@@ -735,28 +772,40 @@
         }
         
         try {
-          // 이전 방에서 나가기
+          console.log(`[ROOM] 방 전환 시작: ${AppState.currentRoom} → ${nextRoom}`);
+          
+          // 방 전환 시작
+          AppState.flags.switching = true;
+          
+          // 1. 이전 방에서 완전 이탈
           socket.emit('leaveRoom', AppState.currentRoom);
           
-          // 상태 업데이트
+          // 2. 상태 업데이트 및 UI 초기화
+          const prevRoom = AppState.currentRoom;
           AppState.currentRoom = nextRoom;
-          
-          // UI 초기화
           messagesEl.innerHTML = '';
-          // 방 전환 시 해당 방의 렌더링된 메시지 ID 초기화 (전체 메시지 다시 로드를 위해)
+          
+          // 3. 캐시 초기화 (해당 방의 렌더링된 메시지 ID 초기화)
           AppState.cache.renderedMids[AppState.currentRoom].clear();
           AppState.cache.lastTs[AppState.currentRoom] = AppState.cache.lastTs[AppState.currentRoom] || 0;
           AppState.cache.lastDayRendered[AppState.currentRoom] = '';
           
-          // UI 업데이트
+          // 4. UI 업데이트
           UI.drawTabs();
           UI.setActiveTabUI();
           
-          // 새 방에 입장
+          // 5. 새 방에 입장
           socket.emit('joinRoom', AppState.currentRoom);
           
-          // 데이터 로드 및 렌더링 (전체 메시지 다시 로드)
-          DataManager.fetchAndRender(true, true);
+          // 6. 데이터 로드 및 렌더링 (전체 메시지 다시 로드)
+          setTimeout(() => {
+            DataManager.fetchAndRender(true, true).finally(() => {
+              // 방 전환 완료
+              AppState.flags.switching = false;
+              MessageManager.onRoomSwitch();
+              console.log(`[ROOM] 방 전환 완료: ${prevRoom} → ${nextRoom}`);
+            });
+          }, 100); // Socket 이벤트 처리 시간 확보
           
           // 모바일 UI 정리
           document.body.classList.remove('profile-open');
@@ -1079,25 +1128,173 @@
 
     /* ===== 데이터 관리 ===== */
     const DataManager = {
+      // 과거 메시지 로드 (무한 스크롤용)
+      loadPastMessages: async () => {
+        if (!AppState.userId) return false;
+        
+        const roomData = AppState.cache.pagination?.[AppState.currentRoom];
+        if (!roomData || !roomData.hasMore || !roomData.oldestTimestamp) {
+          console.log('더 이상 로드할 과거 메시지가 없습니다.');
+          return false;
+        }
+        
+        try {
+          const response = await apiCall('GET', `/api/messages/${AppState.currentRoom}?before=${roomData.oldestTimestamp}&limit=100`);
+          const messages = response?.messages || [];
+          const hasMore = response?.hasMore || false;
+          const oldestTs = response?.oldestTimestamp || null;
+          
+          if (messages && messages.length > 0) {
+            // 스크롤 위치 보존을 위해 현재 높이 저장
+            const messagesEl = DOM.el('#messages');
+            const oldScrollHeight = messagesEl.scrollHeight;
+            const oldScrollTop = messagesEl.scrollTop;
+            
+            // 메시지들을 맨 위에 추가 (시간 순서대로)
+            messages.forEach(msg => {
+              if (!AppState.cache.renderedMids[AppState.currentRoom].has(msg.mid)) {
+                const messageDiv = UI.messageDiv(msg, false); // 스크롤 없이 추가
+                messagesEl.insertBefore(messageDiv, messagesEl.firstChild);
+                AppState.cache.renderedMids[AppState.currentRoom].add(msg.mid);
+              }
+            });
+            
+            // 페이징 정보 업데이트
+            AppState.cache.pagination[AppState.currentRoom] = {
+              hasMore: hasMore,
+              oldestTimestamp: oldestTs
+            };
+            
+            // 스크롤 위치 복원 (새로 추가된 메시지만큼 아래로 이동)
+            const newScrollHeight = messagesEl.scrollHeight;
+            messagesEl.scrollTop = oldScrollTop + (newScrollHeight - oldScrollHeight);
+            
+            console.log(`과거 메시지 ${messages.length}개 로드 완료`);
+            return true;
+          }
+          return false;
+        } catch (error) {
+          console.error('과거 메시지 로드 실패:', error);
+          return false;
+        }
+      },
+
       fetchAndRender: async (forceScroll, fullReload = false) => {
         if(!AppState.userId) return;
         
         try {
           // 방 전환 시에는 전체 메시지 다시 로드, 아니면 증분 로드
           const since = fullReload ? 0 : (AppState.cache.lastTs[AppState.currentRoom] || 0);
-          const messages = await apiCall('GET', `/api/messages/${AppState.currentRoom}?since=${since}`);
+          const response = await apiCall('GET', `/api/messages/${AppState.currentRoom}?since=${since}`);
+          
+          // 새로운 API 응답 구조 처리
+          const messages = response?.messages || response || []; // 하위 호환성 유지
+          const hasMore = response?.hasMore || false;
+          const oldestTs = response?.oldestTimestamp || null;
           
           if(messages && messages.length){
             messages.forEach(addOrUpdateMsg);
             AppState.cache.lastTs[AppState.currentRoom] = Math.max(AppState.cache.lastTs[AppState.currentRoom]||0, messages[messages.length-1].ts||0);
+            
+            // 무한 스크롤 메타데이터 저장
+            if (!AppState.cache.pagination) AppState.cache.pagination = {};
+            AppState.cache.pagination[AppState.currentRoom] = {
+              hasMore: hasMore,
+              oldestTimestamp: oldestTs
+            };
+            
             if (forceScroll) messagesEl.scrollTop = messagesEl.scrollHeight;
           }
+          
+          // 더 보기 버튼 상태 업데이트
+          MessageManager.updateLoadMoreButton();
+          
           const t = new Date().toLocaleTimeString();
           DOM.el('#topStatus').textContent = `연결됨 · ${t}`;
         } catch (error) {
           console.error(error);
           DOM.el('#topStatus').textContent = '연결 끊김';
         }
+      }
+    };
+
+    /* ===== 메시지 관리자 ===== */
+    const MessageManager = {
+      observer: null,
+      isLoading: false,
+
+      // 더 보기 버튼 상태 업데이트
+      updateLoadMoreButton: () => {
+        const btn = DOM.el('#loadMoreBtn');
+        const roomData = AppState.cache.pagination?.[AppState.currentRoom];
+        
+        if (roomData && roomData.hasMore) {
+          btn.style.display = 'flex';
+        } else {
+          btn.style.display = 'none';
+        }
+      },
+
+      // Intersection Observer 초기화
+      initIntersectionObserver: () => {
+        if (!window.IntersectionObserver) {
+          console.warn('Intersection Observer를 지원하지 않는 브라우저입니다.');
+          return;
+        }
+
+        const loadMoreBtn = DOM.el('#loadMoreBtn');
+        
+        MessageManager.observer = new IntersectionObserver((entries) => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting && !MessageManager.isLoading) {
+              const roomData = AppState.cache.pagination?.[AppState.currentRoom];
+              if (roomData && roomData.hasMore) {
+                MessageManager.loadPastMessagesAuto();
+              }
+            }
+          });
+        }, {
+          root: DOM.el('#messages'),
+          rootMargin: '20px',
+          threshold: 0.1
+        });
+
+        if (loadMoreBtn) {
+          MessageManager.observer.observe(loadMoreBtn);
+        }
+      },
+
+      // 자동 로드 (Intersection Observer 용)
+      loadPastMessagesAuto: async () => {
+        if (MessageManager.isLoading) return;
+        
+        MessageManager.isLoading = true;
+        console.log('[AUTO-LOAD] 과거 메시지 자동 로드 시작');
+
+        try {
+          const success = await DataManager.loadPastMessages();
+          if (success) {
+            MessageManager.updateLoadMoreButton();
+          }
+        } catch (error) {
+          console.error('자동 로드 실패:', error);
+        } finally {
+          MessageManager.isLoading = false;
+        }
+      },
+
+      // 방 전환 시 버튼 상태 초기화 및 Observer 재설정
+      onRoomSwitch: () => {
+        MessageManager.updateLoadMoreButton();
+        
+        // Observer 재설정 (새로운 버튼에 대해)
+        if (MessageManager.observer) {
+          MessageManager.observer.disconnect();
+        }
+        
+        setTimeout(() => {
+          MessageManager.initIntersectionObserver();
+        }, 100); // DOM 업데이트 후 Observer 재설정
       }
     };
     
@@ -1300,6 +1497,30 @@
       el('#startBtn').onclick=doLogin;
       el('#logoutBtn').onclick=doLogout;
 
+      // 무한 스크롤 - 100개 더 보기 버튼
+      el('#loadMoreBtn').onclick = async () => {
+        const btn = DOM.el('#loadMoreBtn');
+        const textSpan = DOM.el('.load-more-text');
+        const spinnerSpan = DOM.el('.load-more-spinner');
+        
+        btn.disabled = true;
+        textSpan.style.display = 'none';
+        spinnerSpan.style.display = 'inline';
+        
+        try {
+          const success = await DataManager.loadPastMessages();
+          if (success) {
+            MessageManager.updateLoadMoreButton();
+          }
+        } catch (error) {
+          console.error('과거 메시지 로드 실패:', error);
+        } finally {
+          btn.disabled = false;
+          textSpan.style.display = 'inline';
+          spinnerSpan.style.display = 'none';
+        }
+      };
+
       // Retro toggle
       el('#toggle98').addEventListener('click', ()=>{ applyTheme98(!document.body.classList.contains('win98')); beep(); });
 
@@ -1369,16 +1590,19 @@
       handle.addEventListener('mousedown',down); window.addEventListener('mousemove',move); window.addEventListener('mouseup',up);
     }
 
-    // Socket.io 이벤트 핸들러
+    // Socket.io 이벤트 핸들러 - 강화된 필터링
     socket.on('newMessage', (message) => {
-      if (message.room === AppState.currentRoom) {
+      // 강화된 방 검증: 현재 방과 완전히 일치하고 사용자가 로그인된 상태인 경우만 처리
+      if (message.room === AppState.currentRoom && AppState.userId && !AppState.flags.switching) {
         addOrUpdateMsg(message);
         AppState.cache.lastTs[AppState.currentRoom] = Math.max(AppState.cache.lastTs[AppState.currentRoom] || 0, message.ts || 0);
       }
+      // 다른 방 메시지나 방 전환 중인 메시지는 완전 무시
     });
 
     socket.on('reactionUpdate', (message) => {
-      if (message.room === AppState.currentRoom) {
+      // 반응 업데이트도 동일한 검증 적용
+      if (message.room === AppState.currentRoom && AppState.userId && !AppState.flags.switching) {
         updateReactsView(message);
       }
     });
@@ -1420,6 +1644,9 @@
       ln.value=''; lb.value='';
       restoreTheme98(); // 테마 복원
       attachBeepTo('.tab,.btn,.chip,.add-react,.pick');
+      
+      // 무한 스크롤 Intersection Observer 초기화
+      MessageManager.initIntersectionObserver();
     })();
   </script>
 </body>
