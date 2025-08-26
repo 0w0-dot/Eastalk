@@ -564,6 +564,318 @@
     .lazy-image.loading {
       opacity: 0.5;
     }
+
+    /* ===== Profile Edit Modal ===== */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 70;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+
+    .modal-container {
+      background: var(--panel);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-2);
+      width: min(480px, calc(100vw - 32px));
+      max-height: calc(100vh - 64px);
+      overflow: hidden;
+      animation: modalSlideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    @keyframes modalSlideIn {
+      from {
+        transform: scale(0.9) translateY(20px);
+        opacity: 0;
+      }
+      to {
+        transform: scale(1) translateY(0);
+        opacity: 1;
+      }
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    .modal-header h3 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 24px;
+      color: var(--muted);
+      cursor: pointer;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+    }
+
+    .modal-close:hover {
+      background: var(--line);
+      color: var(--text);
+    }
+
+    .modal-content {
+      padding: 20px;
+      max-height: calc(100vh - 200px);
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* Profile Image Section */
+    .profile-image-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .current-profile-image {
+      position: relative;
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      overflow: hidden;
+      background: var(--line);
+    }
+
+    .current-profile-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .profile-image-overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+      display: flex;
+      justify-content: center;
+      align-items: end;
+      padding: 8px;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .current-profile-image:hover .profile-image-overlay {
+      opacity: 1;
+    }
+
+    .change-image-btn {
+      background: rgba(255, 255, 255, 0.9);
+      border: none;
+      border-radius: 16px;
+      padding: 6px 12px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #333;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .change-image-btn:hover {
+      background: rgba(255, 255, 255, 1);
+    }
+
+    .upload-area {
+      width: 100%;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+
+    /* Profile Info Section */
+    .profile-info-section {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .input-group label {
+      font-weight: 600;
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .input-group input,
+    .input-group textarea {
+      width: 100%;
+      padding: 12px 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      font-size: 16px;
+      background: var(--panel);
+      color: var(--text);
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      resize: none;
+    }
+
+    .input-group input:focus,
+    .input-group textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(255, 212, 0, 0.1);
+    }
+
+    .char-count {
+      font-size: 12px;
+      color: var(--muted);
+      text-align: right;
+      margin-top: -4px;
+    }
+
+    /* Modal Footer */
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      padding: 16px 20px;
+      border-top: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    .btn-cancel {
+      background: var(--panel);
+      color: var(--muted);
+      border: 1px solid var(--line);
+    }
+
+    .btn-cancel:hover {
+      background: var(--line);
+      color: var(--text);
+    }
+
+    .btn-save {
+      background: var(--accent);
+      color: var(--accent-ink);
+      border: 1px solid var(--accent);
+    }
+
+    .btn-save:hover {
+      background: #ffda1a;
+    }
+
+    .btn-save:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    /* Mobile Responsive */
+    @media (max-width: 480px) {
+      .modal-container {
+        width: calc(100vw - 16px);
+        max-height: calc(100vh - 32px);
+      }
+
+      .current-profile-image {
+        width: 100px;
+        height: 100px;
+      }
+
+      .modal-header {
+        padding: 12px 16px;
+      }
+
+      .modal-content {
+        padding: 16px;
+      }
+
+      .modal-footer {
+        padding: 12px 16px;
+      }
+
+      .modal-footer .btn {
+        flex: 1;
+      }
+    }
+
+    /* Uppy Dashboard Customization */
+    .uppy-Dashboard {
+      border-radius: var(--radius-md) !important;
+      border: 2px dashed var(--line) !important;
+      background: var(--panel) !important;
+    }
+
+    .uppy-Dashboard-inner {
+      border: none !important;
+    }
+
+    .uppy-Dashboard--modal .uppy-Dashboard-overlay {
+      background: rgba(0, 0, 0, 0.5) !important;
+    }
+
+    /* Win98 Theme Support */
+    body.win98 .modal-container {
+      border-radius: 0 !important;
+      border: 2px solid #c0c0c0;
+      border-top-color: #fff;
+      border-left-color: #fff;
+      border-right-color: #404040;
+      border-bottom-color: #404040;
+      box-shadow: none !important;
+    }
+
+    body.win98 .modal-header {
+      background: linear-gradient(#000080, #1084d0);
+      color: #fff;
+      border-bottom: 2px solid #000;
+    }
+
+    body.win98 .modal-close {
+      background: #c0c0c0;
+      border: 2px solid #c0c0c0;
+      border-top-color: #fff;
+      border-left-color: #fff;
+      border-right-color: #404040;
+      border-bottom-color: #404040;
+      color: #000;
+      border-radius: 0 !important;
+    }
+
+    body.win98 .input-group input,
+    body.win98 .input-group textarea {
+      border: 2px solid #808080;
+      border-top-color: #404040;
+      border-left-color: #404040;
+      border-right-color: #fff;
+      border-bottom-color: #fff;
+      border-radius: 0 !important;
+    }
   </style>
   <script src="/socket.io/socket.io.js"></script>
 </head>
@@ -732,6 +1044,454 @@
       MAX_FILE_SIZE: 10 * 1024 * 1024, // 10MB
       SCROLL_THRESHOLD: 80
     };
+
+    /* ===== 프로필 편집 모달 시스템 ===== */
+    class ProfileEditModal {
+      constructor() {
+        this.modal = null;
+        this.uppy = null;
+        this.currentImage = null;
+        this.isUploading = false;
+        
+        this.init();
+      }
+
+      init() {
+        console.log('🛠️ ProfileEditModal 초기화 시작');
+        
+        // DOM 요소 바인딩
+        this.bindElements();
+        
+        // 이벤트 리스너 설정
+        this.bindEvents();
+        
+        // Uppy 초기화 (지연)
+        this.initUppy();
+        
+        console.log('✅ ProfileEditModal 초기화 완료');
+      }
+
+      bindElements() {
+        this.modal = document.getElementById('profileEditModal');
+        this.currentProfileImg = document.getElementById('currentProfileImg');
+        this.changeImageBtn = document.getElementById('changeImageBtn');
+        this.imageUploadArea = document.getElementById('imageUploadArea');
+        this.editNickname = document.getElementById('editNickname');
+        this.editStatusMessage = document.getElementById('editStatusMessage');
+        this.nicknameCount = document.getElementById('nicknameCount');
+        this.statusCount = document.getElementById('statusCount');
+      }
+
+      bindEvents() {
+        // 닉네임 글자 수 카운터
+        this.editNickname.addEventListener('input', (e) => {
+          const count = e.target.value.length;
+          this.nicknameCount.textContent = count;
+          if (count > 20) {
+            e.target.value = e.target.value.substring(0, 20);
+            this.nicknameCount.textContent = 20;
+          }
+        });
+
+        // 상태 메시지 글자 수 카운터
+        this.editStatusMessage.addEventListener('input', (e) => {
+          const count = e.target.value.length;
+          this.statusCount.textContent = count;
+          if (count > 50) {
+            e.target.value = e.target.value.substring(0, 50);
+            this.statusCount.textContent = 50;
+          }
+        });
+
+        // 이미지 변경 버튼
+        this.changeImageBtn.addEventListener('click', () => {
+          this.toggleImageUpload();
+        });
+
+        // 모달 외부 클릭 시 닫기
+        this.modal.addEventListener('click', (e) => {
+          if (e.target === this.modal) {
+            this.close();
+          }
+        });
+
+        // ESC 키로 모달 닫기
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && this.isOpen()) {
+            this.close();
+          }
+        });
+      }
+
+      initUppy() {
+        if (typeof Uppy === 'undefined') {
+          console.warn('⚠️ Uppy.js가 로드되지 않았습니다. 파일 업로드 기능이 제한됩니다.');
+          return;
+        }
+
+        try {
+          this.uppy = new Uppy.Core({
+            restrictions: {
+              maxFileSize: 5 * 1024 * 1024, // 5MB
+              maxNumberOfFiles: 1,
+              allowedFileTypes: ['image/*']
+            },
+            locale: {
+              strings: {
+                dropPasteImport: '이미지를 드래그하거나 붙여넣기하세요',
+                browseFiles: '파일 선택',
+                cancel: '취소',
+                done: '완료'
+              }
+            }
+          });
+
+          this.uppy.use(Uppy.Dashboard, {
+            target: '#uppyDashboard',
+            inline: true,
+            width: '100%',
+            height: 200,
+            showProgressDetails: true,
+            hideUploadButton: false,
+            hideRetryButton: true,
+            hidePauseResumeButton: true,
+            hideCancelButton: false,
+            showRemoveButtonAfterComplete: true,
+            note: 'JPG, PNG, GIF 파일만 업로드 가능 (최대 5MB)'
+          });
+
+          this.uppy.use(Uppy.ImageEditor, {
+            target: Uppy.Dashboard,
+            quality: 0.8
+          });
+
+          // XHRUpload 플러그인 설정 - 백엔드 업로드 엔드포인트 연결
+          this.uppy.use(Uppy.XHRUpload, {
+            endpoint: '/api/profile-upload',
+            method: 'POST',
+            formData: true,
+            fieldName: 'image',
+            getResponseData: (responseText) => {
+              const response = JSON.parse(responseText);
+              return {
+                url: response.url,
+                success: response.success
+              };
+            },
+            addMetadata: true
+          });
+
+          // 업로드 시 userId 추가
+          this.uppy.on('upload', () => {
+            if (AppState.userId) {
+              this.uppy.setMeta({ userId: AppState.userId });
+            }
+          });
+
+          // 파일 선택 시 미리보기 업데이트
+          this.uppy.on('file-added', (file) => {
+            console.log('📁 파일 선택됨:', file.name);
+            this.previewImage(file);
+          });
+
+          // 파일 제거 시 원본 이미지로 복원
+          this.uppy.on('file-removed', (file) => {
+            console.log('🗑️ 파일 제거됨:', file.name);
+            this.resetImagePreview();
+          });
+
+          // 업로드 성공 시 처리
+          this.uppy.on('upload-success', (file, response) => {
+            console.log('✅ 파일 업로드 성공:', response);
+            this.currentImage = response.uploadURL || response.body.url;
+          });
+
+          // 에러 처리
+          this.uppy.on('upload-error', (file, error) => {
+            console.error('❌ 파일 업로드 실패:', error);
+            alert('파일 업로드에 실패했습니다. 다시 시도해주세요.');
+          });
+
+          console.log('✅ Uppy.js 초기화 완료');
+        } catch (error) {
+          console.error('❌ Uppy.js 초기화 실패:', error);
+        }
+      }
+
+      open() {
+        if (!this.modal) return;
+
+        console.log('🔓 프로필 편집 모달 열기');
+        
+        // 현재 프로필 정보 로드
+        this.loadCurrentProfile();
+        
+        // 모달 표시
+        this.modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+        
+        // 첫 번째 입력 필드에 포커스
+        setTimeout(() => {
+          this.editNickname.focus();
+        }, 100);
+      }
+
+      close() {
+        if (!this.modal) return;
+
+        console.log('🔒 프로필 편집 모달 닫기');
+        
+        // 업로드 영역 숨기기
+        this.hideImageUpload();
+        
+        // Uppy 리셋
+        if (this.uppy) {
+          this.uppy.reset();
+        }
+        
+        // 모달 숨기기
+        this.modal.style.display = 'none';
+        document.body.style.overflow = '';
+      }
+
+      isOpen() {
+        return this.modal && this.modal.style.display === 'flex';
+      }
+
+      loadCurrentProfile() {
+        // 현재 사용자 정보를 모달에 로드
+        if (AppState.me) {
+          this.editNickname.value = AppState.me.nickname || '';
+          this.editStatusMessage.value = AppState.me.status || '';
+          
+          // 글자 수 카운터 업데이트
+          this.nicknameCount.textContent = this.editNickname.value.length;
+          this.statusCount.textContent = this.editStatusMessage.value.length;
+          
+          // 프로필 이미지 설정
+          const profileImg = AppState.me.avatar || '/favicon.ico';
+          this.currentProfileImg.src = profileImg;
+          this.currentProfileImg.alt = `${AppState.me.nickname}님의 프로필`;
+          
+          this.currentImage = AppState.me.avatar;
+        }
+      }
+
+      toggleImageUpload() {
+        const isVisible = this.imageUploadArea.style.display !== 'none';
+        
+        if (isVisible) {
+          this.hideImageUpload();
+        } else {
+          this.showImageUpload();
+        }
+      }
+
+      showImageUpload() {
+        this.imageUploadArea.style.display = 'block';
+        
+        // Uppy Dashboard 크기 조정
+        if (this.uppy) {
+          setTimeout(() => {
+            this.uppy.getPlugin('Dashboard').requestCloseModal();
+          }, 100);
+        }
+      }
+
+      hideImageUpload() {
+        this.imageUploadArea.style.display = 'none';
+      }
+
+      previewImage(file) {
+        // File 객체를 이용해 미리보기 생성
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          this.currentProfileImg.src = e.target.result;
+        };
+        reader.readAsDataURL(file.data);
+      }
+
+      resetImagePreview() {
+        // 원본 프로필 이미지로 복원
+        if (AppState.me) {
+          this.currentProfileImg.src = AppState.me.avatar || '/favicon.ico';
+        }
+        this.currentImage = AppState.me?.avatar || null;
+      }
+
+      async saveProfile() {
+        if (this.isUploading) return;
+
+        try {
+          this.isUploading = true;
+          console.log('💾 프로필 저장 시작');
+
+          const saveBtn = document.querySelector('.btn-save');
+          if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<div class="spinner"></div> 저장 중...';
+          }
+
+          // 업데이트할 프로필 데이터
+          const profileData = {
+            nickname: this.editNickname.value.trim(),
+            status: this.editStatusMessage.value.trim()
+          };
+
+          // 이미지 업로드가 있는 경우 먼저 업로드 처리
+          if (this.uppy && this.uppy.getFiles().length > 0) {
+            console.log('📤 이미지 업로드 중...');
+            
+            // Uppy를 이용한 파일 업로드
+            const result = await this.uppy.upload();
+            
+            if (result.successful && result.successful.length > 0) {
+              // 업로드 성공 시 response에서 URL 가져오기
+              const uploadedFile = result.successful[0];
+              const response = uploadedFile.response ? uploadedFile.response.body : null;
+              
+              if (response && response.url) {
+                profileData.avatar = response.url;
+                console.log('✅ 이미지 업로드 완료:', profileData.avatar);
+                
+                // 이미지가 업로드된 경우 AppState와 UI를 바로 업데이트
+                AppState.me = { ...AppState.me, avatar: response.url };
+              }
+            } else if (result.failed && result.failed.length > 0) {
+              throw new Error('이미지 업로드에 실패했습니다.');
+            }
+          } else if (this.currentImage !== AppState.me?.avatar) {
+            // 이미지가 변경되었지만 새 파일이 없는 경우 (기존 이미지 유지 또는 제거)
+            profileData.avatar = this.currentImage;
+          }
+
+          // 닉네임이나 상태메시지가 변경된 경우만 서버에 업데이트 요청
+          const hasNicknameChange = profileData.nickname !== (AppState.me?.nickname || '');
+          const hasStatusChange = profileData.status !== (AppState.me?.status || '');
+          const hasAvatarChange = profileData.avatar !== AppState.me?.avatar;
+          
+          if (hasNicknameChange || hasStatusChange || (hasAvatarChange && !this.uppy?.getFiles().length)) {
+            console.log('📝 프로필 정보 업데이트 중...');
+            await this.updateProfile(profileData);
+          } else {
+            console.log('ℹ️ 변경된 프로필 정보가 없습니다.');
+            // UI만 업데이트
+            updateProfileUI();
+          }
+          
+          // 성공적으로 저장되면 모달 닫기
+          this.close();
+          
+          console.log('✅ 프로필 저장 완료');
+
+        } catch (error) {
+          console.error('❌ 프로필 저장 실패:', error);
+          alert('프로필 저장에 실패했습니다. 다시 시도해주세요.');
+        } finally {
+          this.isUploading = false;
+          
+          const saveBtn = document.querySelector('.btn-save');
+          if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '저장';
+          }
+        }
+      }
+
+      async updateProfile(profileData) {
+        return new Promise((resolve, reject) => {
+          // 기존 프로필 업데이트 로직 재사용
+          if (!socket || !socket.connected) {
+            reject(new Error('서버 연결이 끊어졌습니다.'));
+            return;
+          }
+
+          // 소켓을 통한 프로필 업데이트
+          socket.emit('updateProfile', {
+            userId: AppState.userId,
+            ...profileData
+          });
+
+          // 응답 대기
+          const timeout = setTimeout(() => {
+            reject(new Error('서버 응답 시간 초과'));
+          }, 10000);
+
+          const onProfileUpdated = (response) => {
+            clearTimeout(timeout);
+            socket.off('profileUpdated', onProfileUpdated);
+            
+            if (response.success) {
+              // AppState 업데이트
+              AppState.me = { ...AppState.me, ...profileData };
+              
+              // UI 업데이트
+              updateProfileUI();
+              
+              resolve(response);
+            } else {
+              reject(new Error(response.message || '프로필 업데이트 실패'));
+            }
+          };
+
+          socket.on('profileUpdated', onProfileUpdated);
+        });
+      }
+    }
+
+    // 전역 프로필 편집 모달 인스턴스
+    let profileEditModal = null;
+
+    // 모달 제어 함수들 (HTML에서 호출)
+    function openProfileEditModal() {
+      if (!profileEditModal) {
+        profileEditModal = new ProfileEditModal();
+      }
+      profileEditModal.open();
+    }
+
+    function closeProfileEditModal() {
+      if (profileEditModal) {
+        profileEditModal.close();
+      }
+    }
+
+    function saveProfileChanges() {
+      if (profileEditModal) {
+        profileEditModal.saveProfile();
+      }
+    }
+
+    // 프로필 UI 업데이트 함수
+    function updateProfileUI() {
+      if (!AppState.me) return;
+      
+      // 닉네임 업데이트
+      const nicknameView = document.getElementById('nicknameView');
+      if (nicknameView) {
+        nicknameView.textContent = AppState.me.nickname || 'User';
+      }
+      
+      // 아바타 이미지 업데이트
+      const avatarImg = document.getElementById('avatarImg');
+      if (avatarImg) {
+        if (AppState.me.avatar && AppState.me.avatar.trim()) {
+          avatarImg.src = AppState.me.avatar;
+          avatarImg.style.visibility = 'visible';
+        } else {
+          avatarImg.removeAttribute('src');
+          avatarImg.style.visibility = 'hidden';
+        }
+      }
+      
+      // 상태 메시지 업데이트
+      const statusView = document.getElementById('statusView');
+      if (statusView) {
+        statusView.textContent = AppState.me.status || '상태메시지…';
+      }
+      
+      console.log('✅ 프로필 UI 업데이트 완료');
+    }
     
     // 전역 상태
     const AppState = {
@@ -3018,8 +3778,17 @@
       // Retro toggle
       el('#toggle98').addEventListener('click', ()=>{ applyTheme98(!document.body.classList.contains('win98')); beep(); });
 
-      // Profile drawer toggle (mobile)
-      el('#profileBtn').addEventListener('click', ()=>{ document.body.classList.add('profile-open'); });
+      // Profile drawer toggle (mobile) - 새로운 프로필 편집 모달 열기
+      el('#profileBtn').addEventListener('click', () => {
+        // 로그인 상태 확인
+        if (!AppState.me || !AppState.userId) {
+          alert('로그인 후 이용 가능합니다.');
+          return;
+        }
+        
+        // 새로운 프로필 편집 모달 열기
+        openProfileEditModal();
+      });
       el('#scrim').addEventListener('click', ()=>{ document.body.classList.remove('profile-open'); });
 
       // 프로필 모달 기본 동작
@@ -3270,5 +4039,63 @@
       }
     };
   </script>
+
+  <!-- Profile Edit Modal -->
+  <div id="profileEditModal" class="modal-overlay" style="display: none;">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h3>프로필 편집</h3>
+        <button class="modal-close" onclick="closeProfileEditModal()">&times;</button>
+      </div>
+      
+      <div class="modal-content">
+        <!-- 프로필 이미지 섹션 -->
+        <div class="profile-image-section">
+          <div class="current-profile-image">
+            <img id="currentProfileImg" src="" alt="프로필 이미지">
+            <div class="profile-image-overlay">
+              <button id="changeImageBtn" class="change-image-btn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                  <circle cx="12" cy="13" r="4"></circle>
+                </svg>
+                <span>변경</span>
+              </button>
+            </div>
+          </div>
+          <div id="imageUploadArea" class="upload-area" style="display: none;">
+            <div id="uppyDashboard"></div>
+          </div>
+        </div>
+        
+        <!-- 프로필 정보 섹션 -->
+        <div class="profile-info-section">
+          <div class="input-group">
+            <label for="editNickname">닉네임</label>
+            <input type="text" id="editNickname" placeholder="닉네임을 입력하세요" maxlength="20">
+            <div class="char-count"><span id="nicknameCount">0</span>/20</div>
+          </div>
+          
+          <div class="input-group">
+            <label for="editStatusMessage">상태 메시지</label>
+            <textarea id="editStatusMessage" placeholder="상태 메시지를 입력하세요" maxlength="50" rows="2"></textarea>
+            <div class="char-count"><span id="statusCount">0</span>/50</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button class="btn btn-cancel" onclick="closeProfileEditModal()">취소</button>
+        <button class="btn btn-save" onclick="saveProfileChanges()">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Uppy.js CSS -->
+  <link href="https://releases.transloadit.com/uppy/v3.25.0/uppy.min.css" rel="stylesheet">
+  
+  <!-- Uppy.js JavaScript -->
+  <script src="https://releases.transloadit.com/uppy/v3.25.0/uppy.min.js"></script>
+  
 </body>
 </html>

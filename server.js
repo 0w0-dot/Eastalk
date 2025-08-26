@@ -9,6 +9,7 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const cron = require('node-cron');
 const webpush = require('web-push');
+const multer = require('multer');
 
 require('dotenv').config();
 
@@ -1054,6 +1055,139 @@ app.post('/api/upload', async (req, res) => {
   } catch (error) {
     console.error('이미지 업로드 오류:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// 프로필 이미지 업로드를 위한 Multer 설정
+const storage = multer.memoryStorage();
+const profileUpload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB 제한
+    files: 1
+  },
+  fileFilter: (req, file, cb) => {
+    // 이미지 파일만 허용
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('이미지 파일만 업로드 가능합니다.'));
+    }
+  }
+});
+
+// 프로필 이미지 업로드 API
+app.post('/api/profile-upload', profileUpload.single('image'), async (req, res) => {
+  try {
+    console.log('📤 프로필 이미지 업로드 요청 받음');
+    
+    if (!req.file) {
+      return res.status(400).json({ 
+        success: false, 
+        error: '업로드할 파일이 없습니다.' 
+      });
+    }
+
+    const { userId } = req.body;
+    
+    // 사용자 ID 검증
+    if (!isValidUserId(userId)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: '유효하지 않은 사용자 ID입니다.' 
+      });
+    }
+
+    // 파일 정보 로그
+    console.log('📁 업로드된 파일:', {
+      filename: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size
+    });
+
+    // 이미지를 base64로 변환
+    const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    
+    // 사용자 정보 업데이트 (메모리 DB 또는 MongoDB)
+    let user;
+    if (USE_MEMORY_DB) {
+      user = memoryUsers.get(userId);
+      if (user) {
+        user.avatar = base64Image;
+        user.updatedAt = new Date();
+        memoryUsers.set(userId, user);
+        console.log(`✅ 메모리 DB에서 사용자 ${userId} 프로필 이미지 업데이트 완료`);
+      } else {
+        return res.status(404).json({ 
+          success: false, 
+          error: '사용자를 찾을 수 없습니다.' 
+        });
+      }
+    } else {
+      user = await User.findOneAndUpdate(
+        { userId },
+        { 
+          avatar: base64Image,
+          updatedAt: new Date()
+        },
+        { new: true }
+      );
+      
+      if (!user) {
+        return res.status(404).json({ 
+          success: false, 
+          error: '사용자를 찾을 수 없습니다.' 
+        });
+      }
+      
+      console.log(`✅ MongoDB에서 사용자 ${userId} 프로필 이미지 업데이트 완료`);
+    }
+
+    // 성공 응답
+    res.json({
+      success: true,
+      message: '프로필 이미지 업로드가 완료되었습니다.',
+      url: base64Image,
+      user: {
+        userId: user.userId,
+        nickname: user.nickname,
+        avatar: user.avatar,
+        status: user.status
+      }
+    });
+
+    // 다른 클라이언트들에게 프로필 업데이트 알림
+    io.emit('userProfileUpdated', {
+      userId: user.userId,
+      nickname: user.nickname,
+      avatar: user.avatar,
+      status: user.status
+    });
+
+    console.log('🔔 다른 클라이언트들에게 프로필 업데이트 알림 전송');
+
+  } catch (error) {
+    console.error('❌ 프로필 이미지 업로드 오류:', error);
+    
+    // Multer 에러 처리
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ 
+        success: false, 
+        error: '파일 크기가 5MB를 초과했습니다.' 
+      });
+    }
+    
+    if (error.code === 'LIMIT_FILE_COUNT') {
+      return res.status(400).json({ 
+        success: false, 
+        error: '한 번에 하나의 파일만 업로드 가능합니다.' 
+      });
+    }
+
+    res.status(500).json({ 
+      success: false, 
+      error: error.message || '프로필 이미지 업로드에 실패했습니다.' 
+    });
   }
 });
 
