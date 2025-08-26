@@ -6,7 +6,14 @@ UptimeRobot을 사용하여 Render 무료 계정의 15분 sleep 모드를 방지
 ## 🎯 **목표**
 - Render 서버 24/7 가동 (무료 750시간 한도 내)
 - 외부 모니터링을 통한 안정적인 Keep-Alive
-- 자체 node-cron 시스템과 이중화 구성
+- 내장 Keep-Alive 시스템과 이중화 구성
+
+## 🔧 **업데이트 (2025-08-26)**
+✅ **Keep-Alive 시스템이 staging 환경에서도 활성화되도록 수정 완료**
+- staging 환경에서 Keep-Alive 시스템 자동 활성화
+- 14분 간격으로 자체 health check 수행
+- 강화된 오류 처리 및 통계 추적
+- `/api/keepalive-stats` API를 통한 실시간 모니터링 가능
 
 ## 🚀 **단계별 설정**
 

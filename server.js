@@ -1053,23 +1053,31 @@ function initKeepAliveSystem() {
   const getServerURL = () => {
     // 환경 변수로 직접 지정된 경우 우선 사용
     if (process.env.KEEP_ALIVE_URL) {
+      console.log(`🔧 Keep-Alive URL (환경변수): ${process.env.KEEP_ALIVE_URL}`);
       return process.env.KEEP_ALIVE_URL;
     }
     
-    // Render 환경 변수에서 현재 서비스 URL 가져오기
+    // Render 환경 변수에서 현재 서비스 URL 가져오기 (가장 정확)
     if (process.env.RENDER_EXTERNAL_URL) {
+      console.log(`🔧 Keep-Alive URL (Render): ${process.env.RENDER_EXTERNAL_URL}`);
       return process.env.RENDER_EXTERNAL_URL;
     }
     
     // NODE_ENV에 따른 기본 URL 설정
     if (process.env.NODE_ENV === 'staging') {
-      return 'https://eastalk-staging.onrender.com';
+      const url = 'https://eastalk-staging.onrender.com';
+      console.log(`🔧 Keep-Alive URL (Staging): ${url}`);
+      return url;
     } else if (process.env.NODE_ENV === 'production') {
-      return 'https://eastalk.onrender.com'; // 메인 서버 주소 수정
+      const url = 'https://eastalk.onrender.com';
+      console.log(`🔧 Keep-Alive URL (Production): ${url}`);
+      return url;
     }
     
     // 개발 환경 (로컬)
-    return `http://localhost:${PORT}`;
+    const url = `http://localhost:${PORT}`;
+    console.log(`🔧 Keep-Alive URL (Development): ${url}`);
+    return url;
   };
 
   const KEEP_ALIVE_URL = getServerURL();
@@ -1083,26 +1091,41 @@ function initKeepAliveSystem() {
       const fetch = (await import('node-fetch')).default;
       const start = Date.now();
       
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10초 타임아웃
+      
       const response = await fetch(`${KEEP_ALIVE_URL}/health`, {
         method: 'GET',
-        timeout: 10000, // 10초 타임아웃
+        signal: controller.signal,
         headers: {
           'User-Agent': 'Eastalk-KeepAlive/1.0',
-          'X-Keep-Alive': 'true'
+          'X-Keep-Alive': 'true',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive'
         }
       });
       
+      clearTimeout(timeoutId);
       const duration = Date.now() - start;
-      const status = response.ok ? '✅' : '❌';
       
-      console.log(`${status} Keep-Alive Ping: ${response.status} (${duration}ms) - ${new Date().toISOString()}`);
-      
-      // 통계 업데이트
-      updateKeepAliveStats(response.ok, duration);
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`✅ Keep-Alive Success: ${response.status} (${duration}ms) - Environment: ${data.environment || 'unknown'}`);
+        updateKeepAliveStats(true, duration);
+      } else {
+        console.log(`⚠️ Keep-Alive Warning: ${response.status} (${duration}ms) - Response not OK`);
+        updateKeepAliveStats(false, duration);
+      }
       
     } catch (error) {
-      console.log(`❌ Keep-Alive Failed: ${error.message} - ${new Date().toISOString()}`);
+      const errorType = error.name === 'AbortError' ? 'TIMEOUT' : 'ERROR';
+      console.log(`❌ Keep-Alive Failed (${errorType}): ${error.message} - ${new Date().toISOString()}`);
       updateKeepAliveStats(false, 0);
+      
+      // 연속 실패 시 재시작 로직 추가 (선택적)
+      if (keepAliveStats.consecutiveFailures >= 3) {
+        console.log('⚠️ Keep-Alive 연속 실패 감지, 다음 시도에서 재초기화');
+      }
     }
   });
   
@@ -1118,27 +1141,41 @@ let keepAliveStats = {
   totalAttempts: 0,
   successCount: 0,
   failureCount: 0,
+  consecutiveFailures: 0,
   lastSuccess: null,
   lastFailure: null,
   averageResponseTime: 0,
-  uptimeStart: Date.now()
+  maxResponseTime: 0,
+  minResponseTime: 0,
+  uptimeStart: Date.now(),
+  lastPingTime: null
 };
 
 function updateKeepAliveStats(success, responseTime) {
   keepAliveStats.totalAttempts++;
+  keepAliveStats.lastPingTime = new Date().toISOString();
   
   if (success) {
     keepAliveStats.successCount++;
+    keepAliveStats.consecutiveFailures = 0; // 연속 실패 초기화
     keepAliveStats.lastSuccess = new Date().toISOString();
     
-    // 평균 응답 시간 계산 (이동 평균)
-    if (keepAliveStats.averageResponseTime === 0) {
-      keepAliveStats.averageResponseTime = responseTime;
-    } else {
-      keepAliveStats.averageResponseTime = Math.round((keepAliveStats.averageResponseTime * 0.8) + (responseTime * 0.2));
+    // 응답 시간 통계 업데이트
+    if (responseTime > 0) {
+      if (keepAliveStats.averageResponseTime === 0) {
+        keepAliveStats.averageResponseTime = responseTime;
+        keepAliveStats.minResponseTime = responseTime;
+        keepAliveStats.maxResponseTime = responseTime;
+      } else {
+        // 이동 평균 계산
+        keepAliveStats.averageResponseTime = Math.round((keepAliveStats.averageResponseTime * 0.8) + (responseTime * 0.2));
+        keepAliveStats.minResponseTime = Math.min(keepAliveStats.minResponseTime, responseTime);
+        keepAliveStats.maxResponseTime = Math.max(keepAliveStats.maxResponseTime, responseTime);
+      }
     }
   } else {
     keepAliveStats.failureCount++;
+    keepAliveStats.consecutiveFailures++;
     keepAliveStats.lastFailure = new Date().toISOString();
   }
 }
@@ -1150,13 +1187,42 @@ app.get('/api/keepalive-stats', (req, res) => {
     ? Math.round((keepAliveStats.successCount / keepAliveStats.totalAttempts) * 100)
     : 0;
   
+  // 상태 결정 로직 개선
+  let healthStatus = 'healthy';
+  if (keepAliveStats.consecutiveFailures >= 3) {
+    healthStatus = 'critical';
+  } else if (successRate < 80) {
+    healthStatus = 'degraded';
+  } else if (keepAliveStats.failureCount > 0) {
+    healthStatus = 'warning';
+  }
+  
   res.json({
-    ...keepAliveStats,
-    successRate: `${successRate}%`,
+    // 기본 통계
+    totalAttempts: keepAliveStats.totalAttempts,
+    successCount: keepAliveStats.successCount,
+    failureCount: keepAliveStats.failureCount,
+    consecutiveFailures: keepAliveStats.consecutiveFailures,
+    
+    // 시간 정보
+    lastSuccess: keepAliveStats.lastSuccess,
+    lastFailure: keepAliveStats.lastFailure,
+    lastPingTime: keepAliveStats.lastPingTime,
     uptimeSeconds: uptime,
     uptimeDuration: formatDuration(uptime),
-    status: keepAliveStats.failureCount === 0 || 
-            (keepAliveStats.successCount > keepAliveStats.failureCount) ? 'healthy' : 'degraded'
+    
+    // 성능 통계
+    averageResponseTime: keepAliveStats.averageResponseTime,
+    minResponseTime: keepAliveStats.minResponseTime,
+    maxResponseTime: keepAliveStats.maxResponseTime,
+    
+    // 상태 정보
+    successRate: `${successRate}%`,
+    status: healthStatus,
+    
+    // 환경 정보
+    environment: process.env.NODE_ENV || 'development',
+    keepAliveEnabled: isProduction || process.env.NODE_ENV === 'staging'
   });
 });
 
@@ -1183,7 +1249,8 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`⏰ 시작 시간: ${new Date().toISOString()}`);
   
   // 😴 Keep-Alive 시스템 초기화 (Sleep 방지)
-  if (isProduction) {
+  const shouldUseKeepAlive = isProduction || process.env.NODE_ENV === 'staging';
+  if (shouldUseKeepAlive) {
     initKeepAliveSystem();
   } else {
     console.log('🧪 개발 모드: Keep-Alive 시스템 비활성화');

@@ -1,12 +1,12 @@
 # 🚀 Eastalk 테스트 서버 배포 로그
 
-## 📊 현재 상태 (2025-08-25)
+## 📊 현재 상태 (2025-08-26)
 - **서버**: Render 클라우드 플랫폼
 - **브랜치**: `develop`  
-- **최신 커밋**: `6ba49f9` (fix: Keep-Alive URL 수정 및 환경별 자동 감지 로직 개선)
+- **최신 커밋**: TBD (fix: staging 환경 Keep-Alive 시스템 활성화 및 모니터링 강화)
 - **배포 환경**: Node.js + MongoDB + Socket.IO + Keep-Alive 시스템
-- **배포 상태**: ✅ 배포 완료
-- **Sleep 방지**: ✅ 활성화 (24/7 가동)
+- **배포 상태**: 🔄 배포 준비 중
+- **Sleep 방지**: ✅ 강화됨 (staging 환경 지원 추가)
 
 ## 🔧 주요 기능 현황
 
@@ -39,10 +39,12 @@
    - 드래그 가능한 로그인 다이얼로그
    - 접근성 고려 (ARIA 속성, 키보드 네비게이션)
 
-6. **Keep-Alive 시스템 (Sleep 방지)** *(신규 추가 - 2025-08-25)*
+6. **Keep-Alive 시스템 (Sleep 방지)** *(강화됨 - 2025-08-26)*
    - node-cron 기반 자동 Keep-Alive (14분 간격)
-   - 환경별 URL 자동 감지 (staging/production)
-   - 상세 로깅 및 성공률 통계 (`/api/keepalive-stats`)
+   - **신규**: staging 환경에서도 Keep-Alive 활성화
+   - 환경별 URL 자동 감지 (staging/production) + 로깅 추가
+   - 강화된 오류 처리 (타임아웃, 연속 실패 감지)
+   - 고급 모니터링 (`/api/keepalive-stats`) - 4단계 상태 분류
    - UptimeRobot 연동 가이드 완비
    - **효과**: 24/7 서버 가동, 사용자 대기시간 제거
 
@@ -55,7 +57,20 @@
 
 ## 📈 배포 히스토리
 
-### 2025-08-25: Keep-Alive 시스템 구현 (최신)
+### 2025-08-26: Keep-Alive 시스템 강화 (최신)
+- **커밋**: TBD
+- **변경사항**:
+  - **staging 환경 지원**: Keep-Alive가 staging에서도 활성화
+  - **고급 모니터링**: 연속 실패 감지, min/max/avg 응답시간 통계
+  - **강화된 오류 처리**: AbortController 타임아웃, 상세 에러 분류
+  - **상태 분류**: healthy/warning/degraded/critical 4단계 상태 관리
+  - **환경변수 로깅**: URL 감지 과정 투명화
+  - **Windows npm script**: set 명령어로 Windows 환경 지원
+- **목적**: staging 환경 Sleep 방지, 모니터링 고도화
+- **배포 시간**: 예상 ~3분
+- **상태**: 🔄 배포 준비 중
+
+### 2025-08-25: Keep-Alive 시스템 구현
 - **커밋**: `6ba49f9` + `526f1e0`
 - **변경사항**:
   - **자체 Keep-Alive**: node-cron으로 14분마다 `/health` 자가 ping

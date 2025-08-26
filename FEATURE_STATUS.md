@@ -69,14 +69,17 @@
 - **애니메이션**: 호버 효과, 로딩 스피너, 버튼 피드백
 
 ### 7. 😴 Keep-Alive 시스템 (Sleep 방지)
-**상태**: ✅ 완료 (2025-08-25)
-- **기술구현**: node-cron + 환경별 자동 URL 감지
+**상태**: ✅ 강화됨 (2025-08-26)
+- **기술구현**: node-cron + 환경별 자동 URL 감지 + 고급 모니터링
 - **주요 특징**:
   - 14분마다 자체 `/health` 엔드포인트 호출
   - 환경별 URL 자동 감지 (staging/production)
-  - 프로덕션에서만 활성화, 5분 지연 시작
-  - 상세 로깅 및 성공률 통계 추적
-- **모니터링**: `/api/keepalive-stats` API 제공
+  - **신규**: staging 환경에서도 Keep-Alive 활성화
+  - 강화된 오류 처리 (타임아웃, 재시도, 연속 실패 감지)
+  - AbortController 기반 타임아웃 관리
+- **모니터링**: `/api/keepalive-stats` API 제공 + 상세 통계 추가
+  - 연속 실패 감지, 최소/최대/평균 응답시간 추적
+  - 성공률, 마지막 ping 시간, 상태별 분류 (healthy/warning/degraded/critical)
 - **외부 연동**: UptimeRobot 설정 가이드 완비
 - **효과**: 24/7 서버 가동, 사용자 대기시간 제거
 
