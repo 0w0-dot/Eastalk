@@ -131,6 +131,16 @@ self.addEventListener('activate', function(event) {
   event.waitUntil(self.clients.claim());
 });
 
+// 메시지 이벤트 처리 (클라이언트에서 오는 메시지)
+self.addEventListener('message', function(event) {
+  console.log('📨 Service Worker 메시지 수신:', event.data);
+  
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    console.log('⏭️ Service Worker 업데이트 적용');
+    self.skipWaiting();
+  }
+});
+
 // Background Sync (선택사항 - 나중에 오프라인 메시지 지원시 사용)
 self.addEventListener('sync', function(event) {
   if (event.tag === 'background-sync') {

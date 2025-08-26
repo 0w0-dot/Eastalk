@@ -1049,13 +1049,34 @@
         if (!this.pushSupported) return null;
         
         try {
-          const registration = await navigator.serviceWorker.register('/sw.js');
+          // Context7 표준: Service Worker 등록 후 ready 상태 대기
+          const registration = await navigator.serviceWorker.register('/sw.js', {
+            scope: '/' // 명시적 스코프 설정
+          });
           console.log('✅ Service Worker 등록 성공:', registration.scope);
+          
+          // Service Worker가 완전히 활성화될 때까지 대기
+          await navigator.serviceWorker.ready;
+          console.log('✅ Service Worker 활성화 완료');
+          
+          // 기존 등록된 Service Worker 업데이트 확인
+          if (registration.waiting) {
+            console.log('🔄 Service Worker 업데이트 대기 중...');
+            registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+          }
           
           this.serviceWorkerRegistration = registration;
           return registration;
         } catch (error) {
           console.error('❌ Service Worker 등록 실패:', error);
+          
+          // 구체적인 오류 진단
+          if (error.name === 'SecurityError') {
+            console.error('🚫 보안 오류: HTTPS 또는 localhost에서만 Service Worker 사용 가능');
+          } else if (error.name === 'TypeError') {
+            console.error('🚫 타입 오류: Service Worker 파일을 찾을 수 없음');
+          }
+          
           return null;
         }
       }
@@ -1077,7 +1098,7 @@
       }
 
       // 📱 Push 구독 생성
-      async subscribeToPush() {
+      async subscribeToPush(retryCount = 0) {
         if (!this.serviceWorkerRegistration) {
           console.warn('⚠️ Service Worker가 등록되지 않았습니다');
           return null;
@@ -1087,7 +1108,9 @@
           // VAPID 공개키를 Uint8Array로 변환
           const applicationServerKey = this.urlBase64ToUint8Array(this.vapidPublicKey);
           
-          // Push 구독 생성
+          console.log('📱 Push 구독 생성 시도...', retryCount > 0 ? `(재시도 ${retryCount}/3)` : '');
+          
+          // Push 구독 생성 (모바일 최적화)
           const subscription = await this.serviceWorkerRegistration.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: applicationServerKey
@@ -1102,6 +1125,27 @@
           return subscription;
         } catch (error) {
           console.error('❌ Push 구독 실패:', error);
+          
+          // 모바일에서 흔한 오류에 대한 재시도 로직
+          if (retryCount < 3 && (
+            error.name === 'NotSupportedError' ||
+            error.name === 'NotAllowedError' ||
+            error.message.includes('network')
+          )) {
+            console.log(`🔄 ${retryCount + 1}초 후 재시도...`);
+            await new Promise(resolve => setTimeout(resolve, (retryCount + 1) * 1000));
+            return this.subscribeToPush(retryCount + 1);
+          }
+          
+          // 구체적인 오류 메시지
+          if (error.name === 'NotSupportedError') {
+            console.error('🚫 이 브라우저는 Push 알림을 지원하지 않습니다');
+          } else if (error.name === 'NotAllowedError') {
+            console.error('🚫 Push 알림 권한이 거부되었습니다');
+          } else if (error.name === 'InvalidStateError') {
+            console.error('🚫 Service Worker가 올바르게 등록되지 않았습니다');
+          }
+          
           return null;
         }
       }

@@ -30,13 +30,28 @@ const io = socketIO(server, {
 });
 
 // 🎯 Render 최적화 설정
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000; // 포트를 3000으로 복원
 const isProduction = process.env.NODE_ENV === 'production';
 
 // 🔔 VAPID 키 설정 (Web Push)
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || 'BG3zVpPIzzIaAkcJNu8gPIns8VcZXxVR4F0F30_qGPFAhJLtKhcMPEGP9Vh-j8VQxcdRrawnYlLP3i3NfsUzMYc';
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '65iALnW23Qkhie9XUANTnv7ShJLQ_lkjOLiEQDwdYu0';
-const VAPID_EMAIL = process.env.VAPID_EMAIL || 'mailto:admin@eastalk.com';
+
+// 환경별 VAPID Subject 설정 (Safari 호환성 개선)
+function getVapidSubject() {
+  const currentEnv = process.env.NODE_ENV || 'development';
+  
+  switch (currentEnv) {
+    case 'production':
+      return 'mailto:admin@eastalk.onrender.com'; // 프로덕션 도메인
+    case 'staging':
+      return 'mailto:admin@eastalk-staging.onrender.com'; // 스테이징 도메인
+    default:
+      return 'mailto:admin@localhost.dev'; // 로컬 개발용 (Safari 호환)
+  }
+}
+
+const VAPID_EMAIL = process.env.VAPID_EMAIL || getVapidSubject();
 
 // Web Push 설정
 webpush.setVapidDetails(
@@ -44,6 +59,8 @@ webpush.setVapidDetails(
   VAPID_PUBLIC_KEY,
   VAPID_PRIVATE_KEY
 );
+
+console.log(`🔔 VAPID Subject 설정: ${VAPID_EMAIL}`);
 
 // Render 프록시 신뢰 설정 (Rate Limiter 오류 해결)
 app.set('trust proxy', 1);
