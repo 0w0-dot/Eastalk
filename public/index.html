@@ -822,13 +822,24 @@
         for (const [type, dataUrl] of Object.entries(this.soundUrls)) {
           try {
             const response = await fetch(dataUrl);
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
             const arrayBuffer = await response.arrayBuffer();
             const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
             this.soundBuffers.set(type, audioBuffer);
+            console.log(`✅ ${type} 사운드 로드 성공`);
           } catch (error) {
-            console.warn(`⚠️ ${type} 사운드 로드 실패:`, error);
+            console.warn(`⚠️ ${type} 사운드 로드 실패:`, error.message || error);
+            // 사운드 로드 실패해도 시스템은 계속 작동하도록 함
+            this.soundBuffers.set(type, null);
           }
         }
+        
+        // 로드된 사운드 개수 로그
+        const loadedCount = Array.from(this.soundBuffers.values()).filter(buffer => buffer !== null).length;
+        const totalCount = Object.keys(this.soundUrls).length;
+        console.log(`🎵 사운드 시스템: ${loadedCount}/${totalCount}개 로드 완료`);
       }
 
       // 🔔 알림 권한 요청
@@ -858,8 +869,8 @@
         const soundType = type || 'ding'; // 기본 소리
         const buffer = this.soundBuffers.get(soundType);
         
-        if (!buffer) {
-          console.warn(`⚠️ ${soundType} 사운드 버퍼를 찾을 수 없습니다`);
+        if (!buffer || buffer === null) {
+          console.debug(`🔇 ${soundType} 사운드 버퍼 없음 - 무음 재생`);
           return;
         }
 
@@ -2207,7 +2218,19 @@
       let replyTargetHtml = '';
       if (m.replyTo) {
         // 답글인 경우 원본 메시지 정보 표시
-        replyTargetHtml = `<div class="reply-target">↳ ${m.replyToNickname || 'User'}님에게 답글</div>`;
+        // 개선된 fallback: replyToNickname이 없으면 실제 대상을 찾거나 '알 수 없는 사용자'로 표시
+        let targetName = m.replyToNickname;
+        if (!targetName || targetName === 'User') {
+          // 기존 메시지에서 답글 대상 찾기 시도
+          const targetMessage = AppState.cache.renderedMids[m.replyTo];
+          if (targetMessage && targetMessage.nickname) {
+            targetName = targetMessage.nickname;
+          } else {
+            // 최후의 fallback - '알 수 없는 사용자'로 명확히 표시
+            targetName = '알 수 없는 사용자';
+          }
+        }
+        replyTargetHtml = `<div class="reply-target">↳ ${targetName}님에게 답글</div>`;
         row.classList.add('reply');
         // 스레드 연결선 표시
         if (!isMe) {
