@@ -1286,7 +1286,10 @@
         messagesEl.appendChild(sep);
       }
 
-      const stayAtBottom = (messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight) < 80;
+      const messagesContainer = document.querySelector('.messages-container');
+      const stayAtBottom = messagesContainer ? 
+        (messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight) < 80 :
+        (messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight) < 80;
 
       const row=document.createElement('div');
       const isMe = (m.userId === AppState.userId);
@@ -1344,7 +1347,13 @@
         };
       }
 
-      if (stayAtBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
+      if (stayAtBottom) {
+        if (messagesContainer) {
+          messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        } else {
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+      }
       
       // 🚀 새로 추가된 이미지 관찰 등록
       LazyImageManager.observeImages();
@@ -1438,7 +1447,14 @@
               oldestTimestamp: oldestTs
             };
             
-            if (forceScroll) messagesEl.scrollTop = messagesEl.scrollHeight;
+            if (forceScroll) {
+              const messagesContainer = document.querySelector('.messages-container');
+              if (messagesContainer) {
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+              } else {
+                messagesEl.scrollTop = messagesEl.scrollHeight;
+              }
+            }
           }
           
           // 더 보기 버튼 상태 업데이트
