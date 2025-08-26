@@ -1214,7 +1214,7 @@
         
         // 브라우저 알림 표시
         const roomText = room !== AppState.currentRoom ? ` [${room}]` : '';
-        this.showNotification(`${message.name}${roomText}`, {
+        this.showNotification(`${message.nickname || message.name || '익명'}${roomText}`, {
           body: message.text || '이미지를 보냈습니다',
           icon: message.avatar || '/favicon.ico'
         });
