@@ -866,6 +866,62 @@ app.get('/api/messages/:room', async (req, res) => {
   }
 });
 
+// 특정 메시지 조회 API 
+app.get('/api/messages/single/:messageId', async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    
+    if (!messageId || typeof messageId !== 'string') {
+      return res.status(400).json({ error: '유효하지 않은 메시지 ID입니다.' });
+    }
+    
+    let message;
+    if (USE_MEMORY_DB) {
+      message = memoryMessages.get(messageId);
+      if (!message) {
+        return res.status(404).json({ error: '메시지를 찾을 수 없습니다.' });
+      }
+    } else {
+      message = await Message.findOne({ mid: messageId });
+      if (!message) {
+        return res.status(404).json({ error: '메시지를 찾을 수 없습니다.' });
+      }
+    }
+    
+    // 사용자 정보 조회
+    let user;
+    if (USE_MEMORY_DB) {
+      user = await MemoryDB.findUser({ id: message.userId });
+    } else {
+      user = await User.findOne({ id: message.userId });
+    }
+    
+    // 응답 데이터 구성
+    const result = {
+      ts: message.ts,
+      room: message.room,
+      userId: message.userId,
+      nickname: user ? user.nickname : 'User',
+      text: message.text,
+      kind: message.kind,
+      mediaUrl: message.mediaUrl,
+      fileName: message.fileName,
+      mid: message.mid,
+      avatar: user ? user.avatar : '',
+      reactions: message.reactions,
+      replyTo: message.replyTo,
+      replyToNickname: message.replyToNickname,
+      thread: message.thread
+    };
+    
+    console.log(`✅ 메시지 조회 성공: ${messageId} → ${result.nickname}`);
+    res.json(result);
+  } catch (error) {
+    console.error('메시지 조회 오류:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // 이미지 업로드 API (base64 저장 방식)
 app.post('/api/upload', async (req, res) => {
   try {

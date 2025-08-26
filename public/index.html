@@ -739,10 +739,10 @@
       },
       cache: {
         renderedMids: { 
-          '주중': new Set(), 
-          '주말': new Set(), 
-          '전체': new Set(), 
-          '방문예정': new Set() 
+          '주중': new Map(), 
+          '주말': new Map(), 
+          '전체': new Map(), 
+          '방문예정': new Map() 
         },
         lastTs: { '주중': 0, '주말': 0, '전체': 0, '방문예정': 0 },
         lastDayRendered: { '주중': '', '주말': '', '전체': '', '방문예정': '' },
@@ -2168,11 +2168,24 @@
       }
     }
 
+    /* ===== 메시지 정보 조회 함수 ===== */
+    async function fetchMessageInfo(messageId) {
+      try {
+        console.log(`🔍 서버에서 메시지 조회 시작: ${messageId}`);
+        const response = await apiCall('GET', `/api/messages/single/${messageId}`);
+        console.log(`✅ 서버에서 메시지 조회 성공:`, response);
+        return response;
+      } catch (error) {
+        console.error(`❌ 서버에서 메시지 조회 실패 (${messageId}):`, error);
+        throw error;
+      }
+    }
+
     /* ===== Messages ===== */
     function addOrUpdateMsg(m){
       if (document.getElementById('reacts-'+(m.mid||''))){ updateReactsView(m); return; }
       if (m.mid && AppState.cache.renderedMids[AppState.currentRoom].has(m.mid)) return;
-      if (m.mid) AppState.cache.renderedMids[AppState.currentRoom].add(m.mid);
+      if (m.mid) AppState.cache.renderedMids[AppState.currentRoom].set(m.mid, m);
 
       const dayKey = DateUtils.getDateKey(m.ts);
       if (AppState.cache.lastDayRendered[AppState.currentRoom] !== dayKey){
@@ -2218,18 +2231,53 @@
       let replyTargetHtml = '';
       if (m.replyTo) {
         // 답글인 경우 원본 메시지 정보 표시
-        // 개선된 fallback: replyToNickname이 없으면 실제 대상을 찾거나 '알 수 없는 사용자'로 표시
         let targetName = m.replyToNickname;
+        
+        // 1차 fallback: 메시지 캐시에서 답글 대상 찾기
         if (!targetName || targetName === 'User') {
-          // 기존 메시지에서 답글 대상 찾기 시도
-          const targetMessage = AppState.cache.renderedMids[m.replyTo];
+          const targetMessage = AppState.cache.renderedMids[AppState.currentRoom].get(m.replyTo);
           if (targetMessage && targetMessage.nickname) {
             targetName = targetMessage.nickname;
-          } else {
-            // 최후의 fallback - '알 수 없는 사용자'로 명확히 표시
-            targetName = '알 수 없는 사용자';
+            console.log(`🔍 캐시에서 답글 대상 찾음: ${targetName}`);
           }
         }
+        
+        // 2차 fallback: DOM에서 답글 대상 메시지 찾기
+        if (!targetName || targetName === 'User') {
+          const targetElement = document.querySelector(`[data-mid="${m.replyTo}"] .meta`);
+          if (targetElement) {
+            const metaText = targetElement.textContent;
+            const nickMatch = metaText.match(/^(.+?)\s+·/);
+            if (nickMatch) {
+              targetName = nickMatch[1];
+              console.log(`🔍 DOM에서 답글 대상 찾음: ${targetName}`);
+            }
+          }
+        }
+        
+        // 3차 fallback: 서버에서 메시지 정보 조회 (비동기)
+        if (!targetName || targetName === 'User') {
+          targetName = '답글 대상 조회 중...';
+          // 비동기로 서버에서 메시지 정보 조회
+          fetchMessageInfo(m.replyTo).then(messageInfo => {
+            if (messageInfo && messageInfo.nickname) {
+              // DOM 업데이트
+              const replyTargetEl = document.querySelector(`[data-mid="${m.mid}"] .reply-target`);
+              if (replyTargetEl) {
+                replyTargetEl.textContent = `↳ ${messageInfo.nickname}님에게 답글`;
+                console.log(`🔍 서버에서 답글 대상 찾음: ${messageInfo.nickname}`);
+              }
+            }
+          }).catch(error => {
+            console.warn(`⚠️ 서버에서 답글 대상 조회 실패:`, error);
+            // 최후의 fallback
+            const replyTargetEl = document.querySelector(`[data-mid="${m.mid}"] .reply-target`);
+            if (replyTargetEl) {
+              replyTargetEl.textContent = `↳ 알 수 없는 사용자님에게 답글`;
+            }
+          });
+        }
+        
         replyTargetHtml = `<div class="reply-target">↳ ${targetName}님에게 답글</div>`;
         row.classList.add('reply');
         // 스레드 연결선 표시
@@ -2311,7 +2359,7 @@
               if (!AppState.cache.renderedMids[AppState.currentRoom].has(msg.mid)) {
                 const messageDiv = UI.messageDiv(msg, false); // 스크롤 없이 추가
                 messagesEl.insertBefore(messageDiv, messagesEl.firstChild);
-                AppState.cache.renderedMids[AppState.currentRoom].add(msg.mid);
+                AppState.cache.renderedMids[AppState.currentRoom].set(msg.mid, msg);
               }
             });
             
