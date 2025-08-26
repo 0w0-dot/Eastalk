@@ -181,7 +181,10 @@ const MessageSchema = new mongoose.Schema({
   mime: String,
   fileName: String,
   mid: { type: String, required: true },
-  reactions: { type: Object, default: {} }
+  reactions: { type: Object, default: {} },
+  // 🔗 대댓글/스레드 지원
+  replyTo: { type: String, default: null }, // 답글 대상 메시지 ID
+  thread: { type: String, default: null }   // 스레드 그룹 ID (최상위 메시지 ID)
 }, { timestamps: true });
 
 // 성능 최적화 인덱스 생성
@@ -189,6 +192,9 @@ MessageSchema.index({ room: 1, ts: -1 }); // 방별 시간순 정렬 (메인 쿼
 MessageSchema.index({ room: 1, ts: 1 });  // 방별 시간 오름차순 (과거 메시지 조회용)
 MessageSchema.index({ mid: 1 }, { unique: true });          // 메시지 ID 조회 (중복 방지용)
 MessageSchema.index({ userId: 1, ts: -1 }); // 사용자별 메시지 조회용
+// 🔗 스레드/답글 관련 인덱스 추가
+MessageSchema.index({ thread: 1, ts: 1 }); // 스레드별 시간순 정렬 (답글 조회용)
+MessageSchema.index({ replyTo: 1 });       // 특정 메시지의 답글 조회용
 
 // 🔔 Push 구독 스키마 정의
 const PushSubscriptionSchema = new mongoose.Schema({
@@ -600,7 +606,7 @@ app.post('/api/login', async (req, res) => {
 // ===== 메시지 관련 API =====
 app.post('/api/messages', async (req, res) => {
   try {
-    const { room, userId, text, mid } = req.body;
+    const { room, userId, text, mid, replyTo } = req.body;
     
     // 입력 검증
     if (!validateRoom(room)) {
@@ -657,6 +663,23 @@ app.post('/api/messages', async (req, res) => {
     const nickname = user ? user.nickname : ('User-' + userId.slice(-5));
     
     const ts = Date.now();
+    
+    // 🔗 답글 처리 로직
+    let threadId = null;
+    if (replyTo) {
+      let parentMessage;
+      if (USE_MEMORY_DB) {
+        parentMessage = memoryMessages.get(replyTo);
+      } else {
+        parentMessage = await Message.findOne({ mid: replyTo });
+      }
+      
+      if (parentMessage) {
+        // 부모 메시지에 thread가 있으면 사용, 없으면 부모 메시지 ID를 thread로 설정
+        threadId = parentMessage.thread || parentMessage.mid;
+      }
+    }
+    
     const messageData = {
       ts,
       room,
@@ -668,7 +691,9 @@ app.post('/api/messages', async (req, res) => {
       mime: '',
       fileName: '',
       mid: mid || uuidv4(),
-      reactions: {}
+      reactions: {},
+      replyTo: replyTo || null,
+      thread: threadId
     };
     
     let message;
@@ -688,7 +713,9 @@ app.post('/api/messages', async (req, res) => {
       kind: message.kind,
       mid: message.mid,
       avatar: user ? user.avatar : '',
-      reactions: message.reactions
+      reactions: message.reactions,
+      replyTo: message.replyTo,
+      thread: message.thread
     };
     
     // Socket.io로 실시간 전송

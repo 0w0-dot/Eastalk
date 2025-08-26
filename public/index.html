@@ -156,8 +156,22 @@
     .messages::-webkit-scrollbar-thumb:hover {
       background: var(--muted);
     }
-    .msg-row{ display:flex; align-items:flex-end; gap:8px; }
+    .msg-row{ display:flex; align-items:flex-end; gap:8px; position:relative; }
     .msg-row.me{ justify-content:flex-end; }
+    /* 🔗 답글/스레드 스타일 추가 */
+    .msg-row.reply{ margin-left:32px; }
+    .msg-row.reply::before{ 
+      content:''; position:absolute; left:-24px; top:0; width:2px; height:100%; 
+      background:var(--line); border-radius:1px; 
+    }
+    .msg-row.reply .thread-indicator{
+      position:absolute; left:-32px; top:12px; width:20px; height:2px; 
+      background:var(--line); border-radius:1px;
+    }
+    .msg-row.me.reply{ margin-right:32px; margin-left:0; }
+    .msg-row.me.reply::before{ left:auto; right:-24px; }
+    .msg-row.me.reply .thread-indicator{ left:auto; right:-32px; }
+    
     /* avatar button (clickable) */
     .avatar-sm{
       width:28px; height:28px; border-radius:50%; background:#e5e7eb; overflow:hidden;
@@ -165,8 +179,31 @@
       border:0; padding:0; cursor:pointer;
     }
     .avatar-sm img{ width:100%; height:100%; object-fit:cover; display:block; }
-    .bubble{ max-width:86%; padding:12px 14px; border:1px solid var(--line); border-radius:16px; line-height:1.42; background:var(--bubble-other); box-shadow:var(--shadow-1); }
+    
+    /* 말풍선과 답글 버튼 컨테이너 */
+    .message-container{ display:flex; align-items:flex-end; gap:6px; max-width:86%; }
+    .msg-row.me .message-container{ flex-direction:row-reverse; }
+    
+    .bubble{ padding:12px 14px; border:1px solid var(--line); border-radius:16px; line-height:1.42; background:var(--bubble-other); box-shadow:var(--shadow-1); flex:1; }
     .msg-row.me .bubble{ background:var(--bubble-me); }
+    
+    /* 🔗 답글 버튼 스타일 */
+    .reply-btn{
+      width:24px; height:24px; border-radius:50%; 
+      background:#fff; border:1px solid var(--line); 
+      display:flex; align-items:center; justify-content:center;
+      cursor:pointer; opacity:0; transition:opacity .2s;
+      color:var(--muted); font-size:14px; flex-shrink:0;
+    }
+    .reply-btn:hover{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+    .msg-row:hover .reply-btn{ opacity:1; }
+    
+    /* 답글 대상 표시 */
+    .reply-target{
+      font-size:12px; color:var(--muted); margin-bottom:4px; 
+      padding:4px 6px; background:rgba(0,0,0,.05); border-radius:6px;
+      border-left:3px solid var(--accent);
+    }
     .meta{ font-size:11px; color:var(--muted); margin-top:6px; }
 
     /* Reactions */
@@ -177,6 +214,23 @@
     .picker{ display:flex; gap:6px; margin-left:2px; }
     .picker.hidden{ display:none; }
     .pick{ background:#fff; border:1px solid var(--line); border-radius:8px; padding:4px 6px; cursor:pointer; }
+
+    /* 🔗 답글 상태 표시 스타일 */
+    .reply-status{
+      background:var(--bubble-me); border-top:1px solid var(--line);
+      padding:8px 12px; position:sticky; bottom:60px; z-index:4;
+    }
+    .reply-info{
+      display:flex; align-items:center; justify-content:space-between;
+      font-size:14px; color:var(--text);
+    }
+    .cancel-reply{
+      width:20px; height:20px; border:none; background:none; 
+      cursor:pointer; color:var(--muted); font-size:16px;
+      display:flex; align-items:center; justify-content:center;
+      border-radius:50%;
+    }
+    .cancel-reply:hover{ background:rgba(0,0,0,.1); color:var(--text); }
 
     /* Composer (safe-area 고려) */
     .composer{
@@ -555,6 +609,14 @@
         <div class="messages" id="messages"></div>
       </div>
 
+      <!-- 🔗 답글 상태 표시 영역 -->
+      <div id="replyIndicator" class="reply-status" style="display:none;">
+        <div class="reply-info">
+          <span id="replyText">↳ <strong id="replyTarget"></strong>님에게 답글</span>
+          <button id="cancelReply" class="cancel-reply" title="답글 취소">✕</button>
+        </div>
+      </div>
+      
       <div class="composer">
         <input id="text" class="input" placeholder="메시지 입력 (Enter 전송, Shift+Enter 줄바꿈)" disabled />
         <button id="photoBtn" class="btn btn-ghost btn-icon" title="사진">📷</button>
@@ -668,6 +730,12 @@
         sending: false,
         uploading: false,
         switching: false  // 방 전환 중 플래그 추가
+      },
+      // 🔗 답글 상태 관리
+      reply: {
+        active: false,    // 답글 모드 활성화 여부
+        targetMid: null,  // 답글 대상 메시지 ID
+        targetNick: null  // 답글 대상 사용자명
       },
       cache: {
         renderedMids: { 
@@ -1528,6 +1596,41 @@
         t.classList.toggle('active', t.textContent.replace(/\s/g,'') === UI.labelFor(AppState.currentRoom).replace(/\s/g,''));
       });
     }
+    // 🔗 답글 관리 매니저
+    const ReplyManager = {
+      // 답글 시작
+      startReply: (targetMid, targetNick) => {
+        AppState.reply.active = true;
+        AppState.reply.targetMid = targetMid;
+        AppState.reply.targetNick = targetNick;
+        
+        // UI 업데이트
+        const replyIndicator = DOM.el('#replyIndicator');
+        const replyTarget = DOM.el('#replyTarget');
+        
+        replyTarget.textContent = targetNick;
+        replyIndicator.style.display = 'block';
+        
+        // 입력창에 포커스
+        DOM.el('#text').focus();
+        
+        console.log(`[REPLY] 답글 시작: ${targetMid} (${targetNick})`);
+      },
+      
+      // 답글 취소
+      cancelReply: () => {
+        AppState.reply.active = false;
+        AppState.reply.targetMid = null;
+        AppState.reply.targetNick = null;
+        
+        // UI 업데이트
+        const replyIndicator = DOM.el('#replyIndicator');
+        replyIndicator.style.display = 'none';
+        
+        console.log('[REPLY] 답글 모드 종료');
+      }
+    };
+
     // ===== 방 전환 관리 =====
     const RoomManager = {
       switchRoom: (nextRoom) => {
@@ -1971,6 +2074,19 @@
       node.outerHTML = renderReactsHtml(m);
       bindReactionHandlers(m.mid);
     }
+    
+    // 🔗 답글 버튼 이벤트 핸들러
+    function bindReplyHandlers(mid){
+      const replyBtn = document.querySelector(`[data-mid="${mid}"].reply-btn`);
+      if (replyBtn) {
+        replyBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const targetMid = replyBtn.getAttribute('data-mid');
+          const targetNick = replyBtn.getAttribute('data-nick');
+          ReplyManager.startReply(targetMid, targetNick);
+        });
+      }
+    }
     async function reactToggle(mid, emoji){
       try {
         const result = await apiCall('POST', '/api/reactions', { mid, userId: AppState.userId, emoji });
@@ -2062,11 +2178,34 @@
            <div class="meta">${(m.nickname||'')} · ${DateUtils.formatTimeLabel(m.ts)}</div>`;
       }
 
+      // 🔗 답글 대상 표시 HTML 생성
+      let replyTargetHtml = '';
+      if (m.replyTo) {
+        // 답글인 경우 원본 메시지 정보 표시
+        replyTargetHtml = `<div class="reply-target">↳ ${m.nickname || 'User'}님에게 답글</div>`;
+        row.classList.add('reply');
+        // 스레드 연결선 표시
+        if (!isMe) {
+          bubbleInner = `<div class="thread-indicator"></div>${bubbleInner}`;
+        }
+      }
+      
+      // 🔗 답글 버튼 HTML
+      const replyBtnHtml = `<button class="reply-btn" data-mid="${m.mid}" data-nick="${m.nickname || 'User'}" title="답글" aria-label="답글">↳</button>`;
+      
       const reactsHtml = renderReactsHtml(m);
-      row.innerHTML = `${avatarHtml}<div class="bubble">${bubbleInner}${reactsHtml}</div>`;
+      
+      // 메시지 컨테이너 구조 개선
+      const messageContent = `${replyTargetHtml}<div>${(m.kind === 'image' && m.mediaUrl) ? 
+        `<img id="img-${m.mid || m.ts}" class="lazy-image" data-src="${m.mediaUrl}" src="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='200'%20height='100'%3E%3Crect%20fill='%23f3f4f6'%20width='200'%20height='100'/%3E%3Ctext%20fill='%23a3a3a3'%20x='50%25'%20y='50%25'%20text-anchor='middle'%20dy='.3em'%20font-size='12'%3E이미지 로딩 중...%3C/text%3E%3C/svg%3E" alt="${m.fileName || 'image'}" style="max-width:100%; border-radius:12px;" />` 
+        : (m.text || '').replace(/\n/g,'<br/>')}</div>
+           <div class="meta">${(m.nickname||'')} · ${DateUtils.formatTimeLabel(m.ts)}</div>${reactsHtml}`;
+      
+      row.innerHTML = `${avatarHtml}<div class="message-container"><div class="bubble">${messageContent}</div>${replyBtnHtml}</div>`;
       messagesEl.appendChild(row);
 
       bindReactionHandlers(m.mid);
+      bindReplyHandlers(m.mid);
 
       row.querySelectorAll('.p-open').forEach(btn=>{
         btn.addEventListener('click', ()=>{
@@ -2324,16 +2463,29 @@
       const mid = Utils.generateMessageId();
 
       try {
-        const result = await apiCall('POST', '/api/messages', {
+        const requestBody = {
           room: sendRoom,
           userId: AppState.userId,
           text: v,
           mid
-        });
+        };
+        
+        // 🔗 답글 정보 추가
+        if (AppState.reply.active && AppState.reply.targetMid) {
+          requestBody.replyTo = AppState.reply.targetMid;
+        }
+        
+        const result = await apiCall('POST', '/api/messages', requestBody);
         
         AppState.flags.sending = false;
         Utils.setButtonLoading(DOM.el('#sendBtn'), false);
         t.value = '';
+        
+        // 🔗 답글 모드 종료
+        if (AppState.reply.active) {
+          ReplyManager.cancelReply();
+        }
+        
         AppState.cache.lastTs[sendRoom] = Math.max(AppState.cache.lastTs[sendRoom]||0, result.ts||0);
         if (AppState.currentRoom !== sendRoom) return;
         // 실시간으로 이미 받았을 수 있으므로 중복 체크 후 추가
@@ -2484,6 +2636,9 @@
 
       el('#startBtn').onclick=doLogin;
       el('#logoutBtn').onclick=doLogout;
+      
+      // 🔗 답글 취소 버튼
+      el('#cancelReply').onclick = () => ReplyManager.cancelReply();
 
       // 무한 스크롤 - 100개 더 보기 버튼
       el('#loadMoreBtn').onclick = async () => {
