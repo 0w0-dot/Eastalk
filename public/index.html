@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <title>Eastalk (Web)</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <style>
     /* ===== Design Tokens ===== */
     :root{
@@ -28,7 +28,11 @@
     /* ===== App Shell ===== */
     header{
       display:flex; align-items:center; justify-content:space-between;
-      padding:12px 16px; border-bottom:1px solid var(--line);
+      padding:12px 16px; 
+      padding-left:max(16px, env(safe-area-inset-left));
+      padding-right:max(16px, env(safe-area-inset-right));
+      padding-top:max(12px, env(safe-area-inset-top));
+      border-bottom:1px solid var(--line);
       background:#fafafa; position:sticky; top:0; z-index:5;
     }
     header .brand{ font-weight:700; letter-spacing:.2px; }
@@ -42,8 +46,8 @@
     @supports (height: 100dvh){
       .wrap{ height:calc(100dvh - 56px); }
     }
-    @supports not (height: 100dvh){
-      .wrap{ height:calc(var(--vh, 1vh) * 100 - 56px); }
+    @supports (height: 100svh){
+      .wrap{ height:calc(100svh - 56px); }
     }
 
     .left,.right{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-lg); }
@@ -60,15 +64,17 @@
     /* Inputs & Buttons */
     .input{
       width:100%; padding:12px 14px; border:1px solid var(--line); border-radius:var(--radius-sm);
-      font-size:14px; background:#fff; color:var(--text); transition:border-color .15s, box-shadow .15s;
+      font-size:16px; background:#fff; color:var(--text); transition:border-color .15s, box-shadow .15s;
+      touch-action:manipulation; /* 터치 최적화 */
     }
     .input::placeholder{ color:var(--muted); }
     .input:focus{ outline:none; border-color:#d1d5db; box-shadow:var(--focus); }
 
     .btn{
       display:inline-flex; align-items:center; justify-content:center; gap:8px;
-      height:44px; padding:0 16px; border-radius:999px; border:1px solid transparent;
+      min-height:44px; height:44px; padding:12px 16px; border-radius:999px; border:1px solid transparent;
       font-weight:700; cursor:pointer; user-select:none; transition:transform .02s, box-shadow .15s;
+      touch-action:manipulation; /* 더블탭 확대 방지 */
     }
     .btn:active{ transform:translateY(1px); }
     .btn[disabled]{ opacity:.6; cursor:not-allowed; }
@@ -89,6 +95,8 @@
       display:inline-flex; align-items:center; justify-content:center;
       padding:8px 12px; border:1px solid var(--line); border-radius:999px; background:#fff; cursor:pointer;
       max-width:50vw; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;
+      min-height:36px; /* 터치 영역 확보 */
+      touch-action:manipulation; /* 터치 최적화 */
     }
     .tab.active{ background:var(--accent); color:var(--accent-ink); border-color:transparent; }
 
@@ -122,11 +130,19 @@
 
     /* Composer (safe-area 고려) */
     .composer{
-      display:flex; gap:8px; padding:10px; padding-bottom:calc(10px + env(safe-area-inset-bottom));
+      display:flex; gap:8px; 
+      padding:10px; 
+      padding-left:max(10px, env(safe-area-inset-left));
+      padding-right:max(10px, env(safe-area-inset-right));
+      padding-bottom:max(10px, env(safe-area-inset-bottom));
       border-top:1px solid var(--line);
       background:#fff; position:sticky; bottom:0; z-index:3; box-shadow:0 -6px 18px rgba(0,0,0,.04);
     }
-    .composer .input{ height:48px; }
+    .composer .input{ 
+      height:48px; 
+      font-size:16px; /* iOS 확대 방지 */
+      touch-action:manipulation; /* 터치 최적화 */
+    }
 
     /* Login Overlay */
     .auth{ position:fixed; inset:0; display:grid; place-items:center; background:rgba(0,0,0,.35); backdrop-filter:blur(2px); z-index:9999; }
@@ -146,6 +162,23 @@
     /* ===== Mobile layout tweaks ===== */
     #profileBtn{ display:none; }
     #scrim{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:15; }
+    
+    /* 소형 모바일 (480px 이하) */
+    @media (max-width: 480px){
+      .wrap{ padding:6px; gap:6px; }
+      .left{ padding:8px; }
+      .right{ padding:0; }
+      header{ padding:8px 12px; }
+      header .brand{ font-size:14px; }
+      .tabs{ padding:6px; }
+      .tab{ padding:6px 10px; font-size:13px; }
+      .messages{ padding:8px; }
+      .composer{ padding:8px; gap:6px; }
+      .connected-users .user-avatar{ width:24px; height:24px; font-size:10px; }
+      .connected-users{ gap:2px; }
+    }
+    
+    /* 모바일 & 태블릿 (880px 이하) */
     @media (max-width: 880px){
       .wrap{ flex-direction:column; gap:8px; }
       .right{ order:2; }
@@ -155,20 +188,25 @@
       body.profile-open #scrim{ display:block; }
       body.profile-open .left{
         display:block; position:fixed; z-index:20;
-        top:56px; bottom:calc(84px + env(safe-area-inset-bottom)); left:8px; right:8px;
+        top:56px; bottom:calc(84px + max(0px, env(safe-area-inset-bottom))); 
+        left:max(8px, env(safe-area-inset-left)); right:max(8px, env(safe-area-inset-right));
         border-radius:16px; overflow:auto; -webkit-overflow-scrolling:touch; touch-action:pan-y;
       }
-      /* 모바일 접속자 목록 */
+      /* 모바일 접속자 목록 - 기본 크기 */
       .connected-users .user-avatar{ width:28px; height:28px; font-size:11px; }
-      .btn{ height:40px; }
-      .btn-icon{ width:40px; }
+      .btn{ min-height:44px; height:44px; } /* 터치 최소 크기 보장 */
+      .btn-icon{ width:44px; min-height:44px; }
       .bubble{ max-width:92%; }
       .messages{ padding-bottom:120px; }
       .tabs .tab{ max-width:60vw; }
     }
+    /* 기존 480px 이하 추가 스타일 */
     @media (max-width: 480px){
-      .composer .input{ height:44px; }
+      .composer .input{ height:44px; font-size:16px; } /* iOS 확대 방지 */
       .tabs .tab{ max-width:70vw; }
+      /* 소형 모바일에서 더 작은 접속자 아바타 적용 */
+      .connected-users .user-avatar{ width:24px; height:24px; font-size:10px; }
+      .connected-users{ gap:2px; }
       /* 더 작은 화면에서 접속자 아바타 크기 조정 */
       .connected-users .user-avatar{ width:26px; height:26px; font-size:10px; }
       .connected-users .users-grid{ gap:3px; }
