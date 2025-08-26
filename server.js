@@ -67,6 +67,18 @@ app.use(limiter);
 // 정적 파일 제공
 app.use(express.static('public'));
 
+// Service Worker 파일에 올바른 Content-Type 설정
+app.get('/sw.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.sendFile(path.join(__dirname, 'public', 'sw.js'));
+});
+
+// PWA 매니페스트 파일에 올바른 Content-Type 설정
+app.get('/manifest.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.sendFile(path.join(__dirname, 'public', 'manifest.json'));
+});
+
 // 🚀 Render Health Check 엔드포인트
 app.get('/health', (req, res) => {
   res.status(200).json({
