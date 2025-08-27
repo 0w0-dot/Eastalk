@@ -1380,7 +1380,7 @@ io.on('connection', (socket) => {
         updateData.updatedAt = new Date();
         
         user = await User.findOneAndUpdate(
-          { userId },
+          { id: userId },
           updateData,
           { new: true }
         );
