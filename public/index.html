@@ -2283,6 +2283,25 @@
         statusView.textContent = AppState.me.status || '상태메시지…';
       }
       
+      // 접속자 목록에서 현재 사용자 아바타 업데이트
+      if (AppState.userId && AppState.connectedUsers) {
+        const currentUserIndex = AppState.connectedUsers.findIndex(u => u.userId === AppState.userId);
+        if (currentUserIndex >= 0) {
+          // 접속자 목록의 현재 사용자 정보 업데이트
+          AppState.connectedUsers[currentUserIndex] = {
+            ...AppState.connectedUsers[currentUserIndex],
+            nickname: AppState.me.nickname || AppState.connectedUsers[currentUserIndex].nickname,
+            avatar: AppState.me.avatar || AppState.me.profileImage || AppState.connectedUsers[currentUserIndex].avatar,
+            status: AppState.me.status || AppState.connectedUsers[currentUserIndex].status
+          };
+          
+          // 접속자 목록 다시 렌더링
+          if (typeof ConnectedUsersUI !== 'undefined' && ConnectedUsersUI.render) {
+            ConnectedUsersUI.render(AppState.connectedUsers);
+          }
+        }
+      }
+      
       console.log('✅ 프로필 UI 업데이트 완료');
     }
     
