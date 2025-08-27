@@ -2233,7 +2233,7 @@
       }
       
       // Send to server via Socket.IO
-      if (window.socket && window.socket.connected) {
+      if (socket && socket.connected) {
         console.log(`🔄 서버로 업무 상태 변경 전송: ${previousStatus} → ${currentWorkStatus}`);
         socket.emit('updateWorkStatus', {
           status: currentWorkStatus,
@@ -2241,6 +2241,7 @@
         });
       } else {
         console.warn('⚠️ 소켓이 연결되지 않아 업무 상태를 서버에 전송할 수 없습니다');
+        console.warn(`🔍 소켓 상태: socket=${!!socket}, connected=${socket?.connected}`);
       }
     }
 
