@@ -133,8 +133,6 @@ if (USE_MEMORY_DB) {
   console.log(`🌍 환경: ${process.env.NODE_ENV || 'development'}`);
 } else {
   mongoose.connect(MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
     maxPoolSize: 10,
     serverSelectionTimeoutMS: 5000,
     socketTimeoutMS: 45000,
