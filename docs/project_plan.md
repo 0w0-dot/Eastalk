@@ -2,6 +2,74 @@
 
 ## 최근 완료 작업 (2025-08-27)
 
+### 22. 프로필 업데이트 시 접속자 목록 아바타 동기화 문제 해결 완료 (2025-08-27 오후 3:57)
+
+#### 문제 식별
+- **사용자 지적**: `#avatarImg`와 `#usersGrid > div > img` 값이 달라서 UI 동기화 문제 발생
+- **증상**: 사이드바 아바타는 업데이트되지만 접속자 목록 아바타는 변경되지 않음
+- **원인**: `updateProfileUI` 함수에서 접속자 목록 업데이트 로직 누락
+
+#### 기술적 분석
+- **정상 처리**: 사이드바 아바타 (`#avatarImg`) 업데이트 ✅
+- **누락 처리**: 접속자 목록 아바타 (`#usersGrid > div > img`) 업데이트 ❌
+- **원인**: `AppState.connectedUsers` 동기화 및 `ConnectedUsersUI.render()` 호출 누락
+
+#### 해결 방안
+```javascript
+// updateProfileUI 함수에 추가된 접속자 목록 동기화 로직
+// 접속자 목록에서 현재 사용자 아바타 업데이트
+if (AppState.userId && AppState.connectedUsers) {
+  const currentUserIndex = AppState.connectedUsers.findIndex(u => u.userId === AppState.userId);
+  if (currentUserIndex >= 0) {
+    // 접속자 목록의 현재 사용자 정보 업데이트
+    AppState.connectedUsers[currentUserIndex] = {
+      ...AppState.connectedUsers[currentUserIndex],
+      nickname: AppState.me.nickname || AppState.connectedUsers[currentUserIndex].nickname,
+      avatar: AppState.me.avatar || AppState.me.profileImage || AppState.connectedUsers[currentUserIndex].avatar,
+      status: AppState.me.status || AppState.connectedUsers[currentUserIndex].status
+    };
+    
+    // 접속자 목록 다시 렌더링
+    if (typeof ConnectedUsersUI !== 'undefined' && ConnectedUsersUI.render) {
+      ConnectedUsersUI.render(AppState.connectedUsers);
+    }
+  }
+}
+```
+
+#### 검증 과정
+1. **로컬 테스트**: 나우창 계정으로 로그인 후 프로필 편집
+2. **닉네임 변경**: "나우창" → "나우창_동기화테스트"
+3. **동기화 확인**: 사이드바와 접속자 목록 동시 업데이트 확인
+4. **서버 로그**: 접속자 정보 업데이트 및 알림 전송 정상 처리
+
+#### 기술적 성과
+- **완전한 UI 동기화**: 모든 아바타 요소 실시간 일관 업데이트
+- **상태 관리 통합**: `AppState.me` ↔ `AppState.connectedUsers` 완전 동기화
+- **자동 렌더링**: 프로필 변경 시 접속자 목록 자동 재렌더링
+- **실시간 반영**: Socket.IO 통해 다른 클라이언트에게도 변경사항 즉시 전파
+
+#### 서버 로그 확인
+```
+📝 프로필 업데이트 요청: uid-d061089221f6 { nickname: '나우창_동기화테스트', status: '', avatar: 'no avatar' }
+✅ 메모리 DB에서 사용자 uid-d061089221f6 프로필 업데이트 완료
+👤 접속자 정보 업데이트: 나우창_동기화테스트
+🔔 다른 클라이언트들에게 프로필 업데이트 알림 전송
+```
+
+#### 브라우저 콘솔 확인
+```
+💾 프로필 저장 시작
+📝 프로필 정보 업데이트 중...
+✅ 프로필 UI 업데이트 완료
+✅ 프로필 저장 완료
+```
+
+#### 결론
+**프로필 아바타 동기화 완전 해결** - 사이드바(`#avatarImg`), 접속자 목록(`#usersGrid > div > img`), 헤더(`#headerAvatar`) 모든 아바타 요소 실시간 일관 업데이트
+
+---
+
 ### 21. Base64 프로필 이미지 업로드 실시간 UI 업데이트 수정 완료 (2025-08-27 오후 3:01)
 
 #### 문제 상황
