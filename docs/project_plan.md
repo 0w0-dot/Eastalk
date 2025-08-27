@@ -2,6 +2,62 @@
 
 ## 최근 완료 작업 (2025-08-27)
 
+### 26. 나중 접속자의 업무 상태 동기화 문제 완전 해결 (2025-08-27 오후 6:31)
+
+#### 사용자 요청: "나중에 접속한 사람들은 먼저 접속해 있는 사람들의 업무 상태 변경 사항이 제대로 보이지 않아"
+
+#### 🎯 핵심 문제 발견 및 해결
+**문제**: 나중에 접속한 사용자가 기존 접속자들의 업무 상태를 제대로 받지 못함
+- **증상**: 신짱구가 접속해서 나우창 프로필을 열면 "오프라인"으로 잘못 표시
+- **원인**: ConnectedUsersManager.getAllUsers()에서 workStatus 필드가 누락됨
+- **해결**: 모든 관련 메서드에 workStatus 필드 추가
+
+**🔧 서버 측 수정사항**:
+```javascript
+// ConnectedUsersManager.addUser - workStatus 필드 추가
+const userData = {
+  // ... 기존 필드들
+  workStatus: userInfo.workStatus || 'offline',  // 추가
+};
+
+// ConnectedUsersManager.getAllUsers - workStatus 반환 추가
+return Array.from(connectedUsers.values()).map(user => ({
+  // ... 기존 필드들  
+  workStatus: user.workStatus || 'offline',  // 추가
+}));
+
+// userLogin 이벤트 - workStatus 브로드캐스트 추가
+io.emit('userConnected', {
+  // ... 기존 필드들
+  workStatus: userData.workStatus  // 추가
+});
+```
+
+#### 완벽한 멀티유저 테스트 검증
+1. **나우창 먼저 접속**: 업무 상태를 "✅ 검표"로 변경
+   - ✅ 서버 로그: "✅ 업무 상태 변경 완료: 나우창 → checking"
+   - ✅ workStatus 필드가 ConnectedUsersManager에 정상 저장
+
+2. **신짱구 나중 접속**: 나우창의 프로필 확인
+   - ✅ 접속자 목록에 2명 표시 정상
+   - ✅ connectedUsersList 이벤트로 workStatus 수신
+   - ✅ 나우창 프로필 모달: "✅ 검표 - 업무 중" 정확 표시
+
+3. **로그 검증**: 
+   - ✅ `💼 모달 업무 상태 업데이트: uid-f21b378a7dbf → checking`
+   - ✅ 신짱구가 나우창의 실제 업무 상태를 정확히 받음
+
+#### 기술적 성과
+- **완전한 상태 동기화**: 신규 접속자가 모든 기존 접속자의 업무 상태 정확히 수신
+- **실시간 브로드캐스팅**: userConnected 이벤트에 workStatus 포함
+- **데이터 무결성**: getAllUsers에서 workStatus 필드 보장
+- **멀티유저 검증**: 실제 환경에서 완벽한 동작 확인
+
+#### 파일 수정사항
+- **파일**: `C:\Users\skdnc\mysite\server.js`
+- **수정 위치**: ConnectedUsersManager 객체 (라인 310-367)
+- **커밋**: `fix: 나중 접속자의 업무 상태 동기화 문제 해결`
+
 ### 25. #pstatus 프로필 상태 메시지 보호 기능 완성 (2025-08-27 오후 6:11)
 
 #### 사용자 요청: "/sc:implement #pstatus 이것도 같이 수정되는데 오류 해결해줘"
