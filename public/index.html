@@ -2403,8 +2403,8 @@
         this.modal.style.display = 'flex';
         document.body.style.overflow = 'hidden';
         
-        // 첫 번째 입력 필드에 포커스 - 메모리 안전 버전
-        MemoryManager.setTimeoutSafe(() => {
+        // 첫 번째 입력 필드에 포커스
+        setTimeout(() => {
           this.editNickname.focus();
         }, 100);
       }
@@ -3297,7 +3297,7 @@
           if (!state.isTabVisible) {
             let isShowingCount = true;
             
-            state.titleInterval = MemoryManager.setIntervalSafe(() => {
+            state.titleInterval = setInterval(() => {
               // 탭이 활성화되면 깜빡임 중지하고 원래 제목으로 복원
               if (AppState.notifications.state.isTabVisible) {
                 clearInterval(state.titleInterval);
@@ -3839,8 +3839,9 @@
       },
       
       start() {
-        // 3분마다 heartbeat (Socket.IO 기본 ping보다 느리게) - 메모리 안전 버전
-        this.intervalId = MemoryManager.setIntervalSafe(() => {
+        // 3분마다 heartbeat (Socket.IO 기본 ping보다 느리게)
+        // MemoryManager가 아직 정의되지 않았으므로 일반 setInterval 사용
+        this.intervalId = setInterval(() => {
           if (TabActivityMonitor.shouldSendHeartbeat() && socket.connected) {
             this.sendHeartbeat();
           }
@@ -3937,8 +3938,9 @@
       el: (selector) => {
         try {
           const element = document.querySelector(selector);
-          if (!element) {
-            console.warn(`[DOM] 요소를 찾을 수 없습니다: ${selector}`);
+          if (!element && selector !== '#requestNotificationBtn' && selector !== '#permissionRequestArea' && selector !== '#permissionDeniedArea') {
+            // 알림 관련 요소들은 조용히 처리 (선택적 기능이므로)
+            console.debug(`[DOM] 요소를 찾을 수 없습니다: ${selector}`);
           }
           return element;
         } catch (error) {
@@ -5766,21 +5768,21 @@
       function updateUI() {
         const { settings, permission } = AppState.notifications;
         
-        // 권한 상태에 따른 UI 조정
+        // 권한 상태에 따른 UI 조정 (null 체크 추가)
         if (permission === 'denied' || !('Notification' in window)) {
           // 권한이 거부되었거나 지원되지 않는 경우
-          elements.permissionRequestArea.style.display = 'none';
-          elements.permissionDeniedArea.style.display = 'block';
+          if (elements.permissionRequestArea) elements.permissionRequestArea.style.display = 'none';
+          if (elements.permissionDeniedArea) elements.permissionDeniedArea.style.display = 'block';
           // 브라우저 알림 체크박스 제거됨
         } else if (permission === 'default') {
           // 권한이 아직 요청되지 않은 경우
-          elements.permissionRequestArea.style.display = 'block';
-          elements.permissionDeniedArea.style.display = 'none';
+          if (elements.permissionRequestArea) elements.permissionRequestArea.style.display = 'block';
+          if (elements.permissionDeniedArea) elements.permissionDeniedArea.style.display = 'none';
           // 브라우저 알림 체크박스 제거됨
         } else if (permission === 'granted') {
           // 권한이 허용된 경우
-          elements.permissionRequestArea.style.display = 'none';
-          elements.permissionDeniedArea.style.display = 'none';
+          if (elements.permissionRequestArea) elements.permissionRequestArea.style.display = 'none';
+          if (elements.permissionDeniedArea) elements.permissionDeniedArea.style.display = 'none';
           // 브라우저 알림 체크박스 제거됨
         }
         
@@ -5897,9 +5899,12 @@
       elements: new Map(),
       selectors: new Map(),
       
-      // 자주 사용되는 요소들 미리 캐싱 (성능 모니터링 추가)
+      // 자주 사용되는 요소들 미리 캐싱
       get(selector) {
-        PerformanceMonitor.trackDOMQuery(); // DOM 쿼리 추적
+        // PerformanceMonitor가 정의된 후에만 추적
+        if (typeof PerformanceMonitor !== 'undefined') {
+          PerformanceMonitor.trackDOMQuery(); // DOM 쿼리 추적
+        }
         
         if (this.elements.has(selector)) {
           const cached = this.elements.get(selector);
@@ -6135,9 +6140,12 @@
       });
     }, { once: true });
 
-    // 🎯 전역 클릭 이벤트 핸들러 (이벤트 위임 + 성능 모니터링)
+    // 🎯 전역 클릭 이벤트 핸들러 (이벤트 위임)
     function handleGlobalClick(e) {
-      PerformanceMonitor.trackEvent(); // 이벤트 추적
+      // PerformanceMonitor가 정의된 후에만 추적
+      if (typeof PerformanceMonitor !== 'undefined') {
+        PerformanceMonitor.trackEvent(); // 이벤트 추적
+      }
       
       const target = e.target;
       const closest = target.closest.bind(target);
