@@ -1342,8 +1342,8 @@ io.on('connection', (socket) => {
   // 프로필 편집 저장 처리
   socket.on('updateProfile', async (data) => {
     try {
-      const { userId, nickname, status } = data;
-      console.log(`📝 프로필 업데이트 요청: ${userId}`, { nickname, status });
+      const { userId, nickname, status, avatar } = data;
+      console.log(`📝 프로필 업데이트 요청: ${userId}`, { nickname, status, avatar: avatar ? 'avatar updated' : 'no avatar' });
       
       if (!userId) {
         socket.emit('profileUpdateResponse', { 
@@ -1362,6 +1362,7 @@ io.on('connection', (socket) => {
         if (user) {
           if (nickname) user.nickname = nickname;
           if (status) user.status = status;
+          if (avatar) user.avatar = avatar;
           user.updatedAt = new Date();
           memoryUsers.set(userId, user);
           console.log(`✅ 메모리 DB에서 사용자 ${userId} 프로필 업데이트 완료`);
@@ -1377,6 +1378,7 @@ io.on('connection', (socket) => {
         const updateData = {};
         if (nickname) updateData.nickname = nickname;
         if (status) updateData.status = status;
+        if (avatar) updateData.avatar = avatar;
         updateData.updatedAt = new Date();
         
         user = await User.findOneAndUpdate(

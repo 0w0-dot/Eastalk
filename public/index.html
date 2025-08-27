@@ -1971,12 +1971,12 @@
             profileData.avatar = this.currentImage;
           }
 
-          // 닉네임이나 상태메시지가 변경된 경우만 서버에 업데이트 요청
+          // 닉네임, 상태메시지, 아바타 변경사항 확인
           const hasNicknameChange = profileData.nickname !== (AppState.me?.nickname || '');
           const hasStatusChange = profileData.status !== (AppState.me?.status || '');
-          const hasAvatarChange = profileData.avatar !== AppState.me?.avatar;
+          const hasAvatarChange = profileData.avatar !== (AppState.me?.avatar || AppState.me?.profileImage);
           
-          if (hasNicknameChange || hasStatusChange || (hasAvatarChange && !this.uppy?.getFiles().length && !this.selectedFile)) {
+          if (hasNicknameChange || hasStatusChange || hasAvatarChange) {
             console.log('📝 프로필 정보 업데이트 중...');
             await this.updateProfile(profileData);
           } else {
