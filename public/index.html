@@ -2023,9 +2023,9 @@
             reject(new Error('서버 응답 시간 초과'));
           }, 10000);
 
-          const onProfileUpdated = (response) => {
+          const onProfileUpdateResponse = (response) => {
             clearTimeout(timeout);
-            socket.off('profileUpdated', onProfileUpdated);
+            socket.off('profileUpdateResponse', onProfileUpdateResponse);
             
             if (response.success) {
               // AppState 업데이트
@@ -2036,11 +2036,11 @@
               
               resolve(response);
             } else {
-              reject(new Error(response.message || '프로필 업데이트 실패'));
+              reject(new Error(response.error || '프로필 업데이트 실패'));
             }
           };
 
-          socket.on('profileUpdated', onProfileUpdated);
+          socket.on('profileUpdateResponse', onProfileUpdateResponse);
         });
       }
     }

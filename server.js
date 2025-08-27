@@ -1339,6 +1339,100 @@ io.on('connection', (socket) => {
     }
   });
   
+  // 프로필 편집 저장 처리
+  socket.on('updateProfile', async (data) => {
+    try {
+      const { userId, nickname, status } = data;
+      console.log(`📝 프로필 업데이트 요청: ${userId}`, { nickname, status });
+      
+      if (!userId) {
+        socket.emit('profileUpdateResponse', { 
+          success: false, 
+          error: '사용자 ID가 필요합니다.' 
+        });
+        return;
+      }
+
+      let user;
+      
+      // 환경에 따른 데이터베이스 업데이트
+      if (!mongoose.connection.readyState || mongoose.connection.readyState !== 1) {
+        // 메모리 DB 사용 (로컬 개발 환경)
+        user = memoryUsers.get(userId);
+        if (user) {
+          if (nickname) user.nickname = nickname;
+          if (status) user.status = status;
+          user.updatedAt = new Date();
+          memoryUsers.set(userId, user);
+          console.log(`✅ 메모리 DB에서 사용자 ${userId} 프로필 업데이트 완료`);
+        } else {
+          socket.emit('profileUpdateResponse', { 
+            success: false, 
+            error: '사용자를 찾을 수 없습니다.' 
+          });
+          return;
+        }
+      } else {
+        // MongoDB 사용
+        const updateData = {};
+        if (nickname) updateData.nickname = nickname;
+        if (status) updateData.status = status;
+        updateData.updatedAt = new Date();
+        
+        user = await User.findOneAndUpdate(
+          { userId },
+          updateData,
+          { new: true }
+        );
+        
+        if (!user) {
+          socket.emit('profileUpdateResponse', { 
+            success: false, 
+            error: '사용자를 찾을 수 없습니다.' 
+          });
+          return;
+        }
+        
+        console.log(`✅ MongoDB에서 사용자 ${userId} 프로필 업데이트 완료`);
+      }
+      
+      // 접속자 정보도 업데이트
+      const updatedUser = ConnectedUsersManager.updateUser(socket.id, {
+        nickname: user.nickname,
+        status: user.status
+      });
+      
+      // 성공 응답 전송
+      socket.emit('profileUpdateResponse', {
+        success: true,
+        message: '프로필이 성공적으로 업데이트되었습니다.',
+        user: {
+          userId: user.userId,
+          nickname: user.nickname,
+          status: user.status,
+          avatar: user.avatar
+        }
+      });
+      
+      // 다른 클라이언트들에게 프로필 변경 알림
+      io.emit('userProfileUpdated', {
+        userId: user.userId,
+        nickname: user.nickname,
+        avatar: user.avatar,
+        status: user.status
+      });
+      
+      console.log('🔔 다른 클라이언트들에게 프로필 업데이트 알림 전송');
+      
+    } catch (error) {
+      console.error('❌ 프로필 업데이트 오류:', error);
+      socket.emit('profileUpdateResponse', { 
+        success: false, 
+        error: '프로필 업데이트 중 오류가 발생했습니다.' 
+      });
+    }
+  });
+  
   // 사용자 프로필 업데이트 처리
   socket.on('userProfileUpdated', (data) => {
     try {
