@@ -85,6 +85,16 @@ app.use(limiter);
 // 정적 파일 제공
 app.use(express.static('public'));
 
+// 🐛 API 요청 디버깅 미들웨어
+app.use('/api', (req, res, next) => {
+  console.log(`🔍 API 요청: ${req.method} ${req.path}`);
+  console.log('📋 요청 헤더:', req.headers['content-type']);
+  if (req.body && Object.keys(req.body).length > 0) {
+    console.log('📦 요청 본문:', req.body);
+  }
+  next();
+});
+
 // Service Worker 파일에 올바른 Content-Type 설정
 app.get('/sw.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
@@ -1077,6 +1087,7 @@ const profileUpload = multer({
 });
 
 // 프로필 이미지 업로드 API
+console.log('🔧 프로필 이미지 업로드 API 라우트 등록 중...');
 app.post('/api/profile-upload', profileUpload.single('image'), async (req, res) => {
   try {
     console.log('📤 프로필 이미지 업로드 요청 받음');
@@ -1785,12 +1796,33 @@ function formatDuration(seconds) {
   }
 }
 
+// 🚨 404 오류 처리 미들웨어 (모든 라우트 뒤에 위치)
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    console.error(`❌ 404 오류 - API 엔드포인트를 찾을 수 없음: ${req.method} ${req.path}`);
+    console.error('📋 사용 가능한 API:', [
+      'POST /api/profile-upload',
+      'POST /api/upload', 
+      'GET /api/messages/single/:messageId'
+    ]);
+    return res.status(404).json({ 
+      success: false, 
+      error: `API 엔드포인트를 찾을 수 없습니다: ${req.method} ${req.path}` 
+    });
+  }
+  next();
+});
+
 // 🚀 Render 최적화된 서버 시작
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Eastalk 서버가 포트 ${PORT}에서 실행 중입니다.`);
   console.log(`🌍 환경: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 MongoDB: ${MONGODB_URI ? '연결됨' : '로컬 사용'}`);
   console.log(`⏰ 시작 시간: ${new Date().toISOString()}`);
+  console.log('📋 등록된 API 라우트:');
+  console.log('  - POST /api/profile-upload (프로필 이미지 업로드)');
+  console.log('  - POST /api/upload (메시지 이미지 업로드)');
+  console.log('  - GET /api/messages/single/:messageId (단일 메시지 조회)');
   
   // 😴 Keep-Alive 시스템 초기화 (Sleep 방지)
   const shouldUseKeepAlive = isProduction || process.env.NODE_ENV === 'staging';
