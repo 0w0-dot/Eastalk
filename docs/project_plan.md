@@ -196,6 +196,114 @@ socket.broadcast.emit('userProfileUpdated', {
 ✅ 프로필 저장 완료
 ```
 
+### 25. 업무 상태 변경 UX 개선: 저장/취소 버튼 구현 완료 (2025-08-27 오후 5:20)
+
+#### 사용자 요청
+**문제 상황**: 프로필 실시간 동기화는 해결되었으나, 업무 상태 변경이 여전히 적용되지 않는 문제 발생
+- **요청 내용**: "업무상태변경시 변경 사항 저장 버튼을 추가해서 서버에 데이터를 보내서 모두에게 적용되게 해야해"
+
+#### UX 개선 분석 및 설계
+**🎯 UX 문제점**:
+1. **즉시 적용 방식의 혼란**: 업무 상태 선택 시 즉시 적용되어 실수로 변경될 위험
+2. **사용자 의도 확인 부족**: 변경 의사를 명확히 확인하는 절차 없음
+3. **취소 기능 부재**: 잘못 선택했을 때 되돌릴 방법 없음
+
+**🎨 설계 방향**:
+- **2단계 확인 프로세스**: 선택 → 저장 확인 → 적용
+- **임시 상태 관리**: 서버 전송 전 로컬에서 선택 상태 관리
+- **시각적 피드백**: 선택된 항목과 저장 전 상태를 명확히 구분
+
+#### 구현된 솔루션
+
+**1. 임시 상태 관리 시스템**
+```javascript
+// 임시 선택 상태를 위한 전역 변수
+let selectedWorkStatus = 'offline'; // 현재 선택된 상태 (저장 전)
+
+// 임시 선택 함수 (서버 전송하지 않음)
+function selectWorkStatusTemp(status) {
+    selectedWorkStatus = status;
+    updateWorkStatusSelection(); // UI만 업데이트
+}
+```
+
+**2. 저장/취소 버튼 UI 구현**
+```html
+<!-- 기존 라디오 버튼 아래에 추가 -->
+<div class="status-actions">
+    <button class="status-cancel-btn" onclick="cancelWorkStatusChange()">취소</button>
+    <button class="status-save-btn" onclick="saveWorkStatusChange()">저장</button>
+</div>
+```
+
+**3. 시각적 피드백 시스템**
+```css
+/* 선택된 상태 표시 */
+.work-status-option.selected {
+    background-color: #e3f2fd;
+    border-color: #2196f3;
+    box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.3);
+}
+
+/* 저장/취소 버튼 스타일링 */
+.status-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+    justify-content: center;
+}
+```
+
+**4. 사용자 확인 워크플로**
+```javascript
+// 저장 함수: 실제 서버 전송
+function saveWorkStatusChange() {
+    if (selectedWorkStatus !== AppState.userId) {
+        console.log('[WORK_STATUS] 업무 상태 변경 저장:', selectedWorkStatus);
+        
+        // Socket.IO로 서버에 전송
+        socket.emit('updateWorkStatus', {
+            userId: AppState.userId,
+            status: selectedWorkStatus
+        });
+        
+        // 로컬 상태 업데이트
+        AppState.workStatus = selectedWorkStatus;
+    }
+    closeModal(); // 모달 닫기
+}
+
+// 취소 함수: 원래 상태로 복원
+function cancelWorkStatusChange() {
+    selectedWorkStatus = AppState.workStatus || 'offline';
+    updateWorkStatusSelection();
+    closeModal();
+}
+```
+
+#### 기술적 개선사항
+1. **상태 분리**: 임시 선택 상태(`selectedWorkStatus`)와 실제 저장된 상태(`AppState.workStatus`) 분리
+2. **이벤트 최적화**: 불필요한 서버 요청 방지, 사용자 확인 후에만 전송
+3. **UI 일관성**: 기존 모달 시스템과 통합된 디자인
+4. **에러 처리**: 취소 시 안전한 상태 복원
+
+#### 테스트 시나리오
+1. **정상 사용**: 업무 상태 선택 → 저장 버튼 → 서버 반영 → 다른 사용자에게 표시
+2. **취소 동작**: 업무 상태 선택 → 취소 버튼 → 원래 상태로 복원
+3. **실수 방지**: 잘못 선택해도 저장 전까지는 실제 적용되지 않음
+
+#### 커밋 정보
+- **커밋 해시**: `81e5904`
+- **커밋 메시지**: "feat: 업무 상태 변경에 저장/취소 버튼 추가하여 사용자 경험 개선"
+- **변경 파일**: `public/index.html` (클라이언트 사이드 전체 구현)
+
+#### 다음 단계
+- [ ] 스테이징 서버 배포 및 실제 환경 테스트
+- [ ] 다중 사용자 환경에서 실시간 동기화 확인
+- [ ] 모바일 환경에서 버튼 UI 반응성 테스트
+
+---
+
 ### 24. 실제 서버 로그 분석 및 MongoDB 설정 최적화 완료 (2025-08-27 오후 4:35)
 
 #### 로그 분석 요청 및 결과
