@@ -1353,6 +1353,7 @@
         this.uppy = null;
         this.currentImage = null;
         this.isUploading = false;
+        this.selectedFile = null; // 기본 파일 업로드용
         
         this.init();
       }
@@ -1490,97 +1491,274 @@
       }
 
       initUppy() {
-        if (typeof Uppy === 'undefined') {
-          console.warn('⚠️ Uppy.js가 로드되지 않았습니다. 파일 업로드 기능이 제한됩니다.');
+        console.log('🚀 파일 업로드 시스템 초기화 시작...');
+        
+        // Uppy.js 사용 시도
+        if (typeof Uppy !== 'undefined') {
+          try {
+            console.log('📦 Uppy.js 사용 가능, 고급 업로드 시스템 초기화 중...');
+            this.initUppyAdvanced();
+            return;
+          } catch (error) {
+            console.error('❌ Uppy.js 초기화 실패:', error);
+            console.log('🔄 기본 파일 업로드 시스템으로 전환...');
+          }
+        } else {
+          console.warn('⚠️ Uppy.js가 로드되지 않았습니다.');
+          console.log('🔄 기본 파일 업로드 시스템으로 전환...');
+        }
+        
+        // 기본 HTML5 파일 업로드 시스템으로 fallback
+        this.initBasicFileUpload();
+      }
+
+      initUppyAdvanced() {
+        this.uppy = new Uppy({
+          restrictions: {
+            maxFileSize: 5 * 1024 * 1024, // 5MB
+            maxNumberOfFiles: 1,
+            allowedFileTypes: ['image/*']
+          },
+          locale: {
+            strings: {
+              dropPasteImport: '이미지를 드래그하거나 붙여넣기하세요',
+              browseFiles: '파일 선택',
+              cancel: '취소',
+              done: '완료'
+            }
+          }
+        });
+
+        this.uppy.use(Uppy.Dashboard, {
+          target: '#uppyDashboard',
+          inline: true,
+          width: '100%',
+          height: 200,
+          showProgressDetails: true,
+          hideUploadButton: false,
+          hideRetryButton: true,
+          hidePauseResumeButton: true,
+          hideCancelButton: false,
+          showRemoveButtonAfterComplete: true,
+          note: 'JPG, PNG, GIF 파일만 업로드 가능 (최대 5MB)'
+        });
+
+        this.uppy.use(Uppy.ImageEditor, {
+          target: Uppy.Dashboard,
+          quality: 0.8
+        });
+
+        this.uppy.use(Uppy.XHRUpload, {
+          endpoint: '/api/profile-upload',
+          method: 'POST',
+          formData: true,
+          fieldName: 'image',
+          getResponseData: (responseText) => {
+            const response = JSON.parse(responseText);
+            return {
+              url: response.url,
+              success: response.success
+            };
+          },
+          addMetadata: true
+        });
+
+        // 이벤트 핸들러
+        this.uppy.on('upload', () => {
+          if (AppState.userId) {
+            this.uppy.setMeta({ userId: AppState.userId });
+          }
+        });
+
+        this.uppy.on('file-added', (file) => {
+          console.log('📁 파일 선택됨:', file.name);
+          this.previewImage(file);
+        });
+
+        this.uppy.on('file-removed', (file) => {
+          console.log('🗑️ 파일 제거됨:', file.name);
+          this.resetImagePreview();
+        });
+
+        this.uppy.on('upload-success', (file, response) => {
+          console.log('✅ 파일 업로드 성공:', response);
+          this.currentImage = response.uploadURL || response.body.url;
+        });
+
+        this.uppy.on('upload-error', (file, error) => {
+          console.error('❌ 파일 업로드 실패:', error);
+          alert('파일 업로드에 실패했습니다. 다시 시도해주세요.');
+        });
+
+        console.log('✅ Uppy.js 고급 업로드 시스템 초기화 완료');
+      }
+
+      initBasicFileUpload() {
+        console.log('🛠️ 기본 파일 업로드 시스템 초기화...');
+        
+        // 기본 파일 업로드 UI 생성
+        const uploadArea = document.getElementById('imageUploadArea');
+        if (!uploadArea) {
+          console.error('❌ imageUploadArea를 찾을 수 없습니다');
           return;
         }
 
+        // 기존 내용 지우고 기본 파일 업로드 UI 생성
+        uploadArea.innerHTML = `
+          <div class="basic-upload-container" style="
+            border: 2px dashed var(--line, #e5e7eb);
+            border-radius: var(--radius-md, 8px);
+            padding: 24px;
+            text-align: center;
+            background: var(--panel, #f9fafb);
+            transition: all 0.2s ease;
+          ">
+            <div class="upload-icon" style="font-size: 48px; margin-bottom: 12px;">📷</div>
+            <h3 style="margin: 0 0 8px 0; color: var(--text, #374151);">프로필 사진 선택</h3>
+            <p style="margin: 0 0 16px 0; color: var(--muted, #6b7280); font-size: 14px;">
+              JPG, PNG, GIF 파일만 업로드 가능 (최대 5MB)
+            </p>
+            <input type="file" id="basicFileInput" accept="image/*" style="display: none;">
+            <button type="button" id="selectFileBtn" style="
+              background: var(--accent, #3b82f6);
+              color: white;
+              border: none;
+              padding: 10px 20px;
+              border-radius: var(--radius-sm, 6px);
+              cursor: pointer;
+              font-size: 14px;
+              margin-right: 8px;
+            ">파일 선택</button>
+            <button type="button" id="clearFileBtn" style="
+              background: var(--muted, #6b7280);
+              color: white;
+              border: none;
+              padding: 10px 20px;
+              border-radius: var(--radius-sm, 6px);
+              cursor: pointer;
+              font-size: 14px;
+              display: none;
+            ">선택 취소</button>
+            <div id="filePreview" style="margin-top: 16px; display: none;">
+              <img id="previewImage" style="max-width: 200px; max-height: 200px; border-radius: var(--radius-md, 8px);">
+              <p id="fileName" style="margin: 8px 0 0 0; font-size: 12px; color: var(--muted, #6b7280);"></p>
+            </div>
+          </div>
+        `;
+
+        // 이벤트 리스너 바인딩
+        const fileInput = document.getElementById('basicFileInput');
+        const selectBtn = document.getElementById('selectFileBtn');
+        const clearBtn = document.getElementById('clearFileBtn');
+        const preview = document.getElementById('filePreview');
+        const previewImg = document.getElementById('previewImage');
+        const fileName = document.getElementById('fileName');
+
+        if (!fileInput || !selectBtn || !clearBtn) {
+          console.error('❌ 기본 업로드 UI 요소 생성 실패');
+          return;
+        }
+
+        // 파일 선택 버튼 클릭
+        selectBtn.addEventListener('click', () => {
+          console.log('📂 파일 선택 버튼 클릭됨');
+          fileInput.click();
+        });
+
+        // 파일 선택됨
+        fileInput.addEventListener('change', (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+
+          console.log('📁 기본 파일 선택됨:', file.name, `(${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+
+          // 파일 크기 검사
+          if (file.size > 5 * 1024 * 1024) {
+            alert('파일 크기는 5MB 이하여야 합니다.');
+            fileInput.value = '';
+            return;
+          }
+
+          // 파일 타입 검사
+          if (!file.type.startsWith('image/')) {
+            alert('이미지 파일만 업로드할 수 있습니다.');
+            fileInput.value = '';
+            return;
+          }
+
+          // 선택된 파일 저장
+          this.selectedFile = file;
+
+          // 미리보기 표시
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            previewImg.src = e.target.result;
+            fileName.textContent = file.name;
+            preview.style.display = 'block';
+            clearBtn.style.display = 'inline-block';
+            
+            // 프로필 이미지 미리보기 업데이트
+            if (this.currentProfileImg) {
+              this.currentProfileImg.src = e.target.result;
+              console.log('🖼️ 프로필 이미지 미리보기 업데이트 완료');
+            }
+          };
+          reader.readAsDataURL(file);
+        });
+
+        // 선택 취소 버튼
+        clearBtn.addEventListener('click', () => {
+          console.log('🗑️ 파일 선택 취소');
+          fileInput.value = '';
+          this.selectedFile = null;
+          preview.style.display = 'none';
+          clearBtn.style.display = 'none';
+          this.resetImagePreview();
+        });
+
+        console.log('✅ 기본 파일 업로드 시스템 초기화 완료');
+      }
+
+      async uploadSelectedFile(file) {
+        if (!file) {
+          console.error('❌ 업로드할 파일이 없습니다');
+          return null;
+        }
+
         try {
-          this.uppy = new Uppy({
-            restrictions: {
-              maxFileSize: 5 * 1024 * 1024, // 5MB
-              maxNumberOfFiles: 1,
-              allowedFileTypes: ['image/*']
-            },
-            locale: {
-              strings: {
-                dropPasteImport: '이미지를 드래그하거나 붙여넣기하세요',
-                browseFiles: '파일 선택',
-                cancel: '취소',
-                done: '완료'
-              }
-            }
-          });
+          console.log('🚀 기본 파일 업로드 시작:', file.name);
 
-          this.uppy.use(Uppy.Dashboard, {
-            target: '#uppyDashboard',
-            inline: true,
-            width: '100%',
-            height: 200,
-            showProgressDetails: true,
-            hideUploadButton: false,
-            hideRetryButton: true,
-            hidePauseResumeButton: true,
-            hideCancelButton: false,
-            showRemoveButtonAfterComplete: true,
-            note: 'JPG, PNG, GIF 파일만 업로드 가능 (최대 5MB)'
-          });
+          // FormData 객체 생성
+          const formData = new FormData();
+          formData.append('image', file);
+          
+          if (AppState.userId) {
+            formData.append('userId', AppState.userId);
+          }
 
-          this.uppy.use(Uppy.ImageEditor, {
-            target: Uppy.Dashboard,
-            quality: 0.8
-          });
-
-          // XHRUpload 플러그인 설정 - 백엔드 업로드 엔드포인트 연결
-          this.uppy.use(Uppy.XHRUpload, {
-            endpoint: '/api/profile-upload',
+          // 서버에 파일 업로드
+          const response = await fetch('/api/profile-upload', {
             method: 'POST',
-            formData: true,
-            fieldName: 'image',
-            getResponseData: (responseText) => {
-              const response = JSON.parse(responseText);
-              return {
-                url: response.url,
-                success: response.success
-              };
-            },
-            addMetadata: true
+            body: formData
           });
 
-          // 업로드 시 userId 추가
-          this.uppy.on('upload', () => {
-            if (AppState.userId) {
-              this.uppy.setMeta({ userId: AppState.userId });
-            }
-          });
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
 
-          // 파일 선택 시 미리보기 업데이트
-          this.uppy.on('file-added', (file) => {
-            console.log('📁 파일 선택됨:', file.name);
-            this.previewImage(file);
-          });
+          const result = await response.json();
+          console.log('📤 기본 파일 업로드 서버 응답:', result);
 
-          // 파일 제거 시 원본 이미지로 복원
-          this.uppy.on('file-removed', (file) => {
-            console.log('🗑️ 파일 제거됨:', file.name);
-            this.resetImagePreview();
-          });
+          if (result.success && result.url) {
+            console.log('✅ 기본 파일 업로드 성공:', result.url);
+            return result;
+          } else {
+            throw new Error('서버 응답에 오류가 있습니다.');
+          }
 
-          // 업로드 성공 시 처리
-          this.uppy.on('upload-success', (file, response) => {
-            console.log('✅ 파일 업로드 성공:', response);
-            this.currentImage = response.uploadURL || response.body.url;
-          });
-
-          // 에러 처리
-          this.uppy.on('upload-error', (file, error) => {
-            console.error('❌ 파일 업로드 실패:', error);
-            alert('파일 업로드에 실패했습니다. 다시 시도해주세요.');
-          });
-
-          console.log('✅ Uppy.js 초기화 완료');
         } catch (error) {
-          console.error('❌ Uppy.js 초기화 실패:', error);
+          console.error('❌ 기본 파일 업로드 실패:', error);
+          throw error;
         }
       }
 
@@ -1614,6 +1792,9 @@
         if (this.uppy) {
           this.uppy.reset();
         }
+        
+        // 기본 파일 업로드 리셋
+        this.selectedFile = null;
         
         // 모달 숨기기
         this.modal.style.display = 'none';
@@ -1748,9 +1929,9 @@
             status: this.editStatusMessage.value.trim()
           };
 
-          // 이미지 업로드가 있는 경우 먼저 업로드 처리
+          // 이미지 업로드 처리 (Uppy 또는 기본 파일 업로드)
           if (this.uppy && this.uppy.getFiles().length > 0) {
-            console.log('📤 이미지 업로드 중...');
+            console.log('📤 Uppy 이미지 업로드 중...');
             
             // Uppy를 이용한 파일 업로드
             const result = await this.uppy.upload();
@@ -1762,12 +1943,27 @@
               
               if (response && response.url) {
                 profileData.avatar = response.url;
-                console.log('✅ 이미지 업로드 완료:', profileData.avatar);
+                console.log('✅ Uppy 이미지 업로드 완료:', profileData.avatar);
                 
                 // 이미지가 업로드된 경우 AppState와 UI를 바로 업데이트
                 AppState.me = { ...AppState.me, avatar: response.url };
               }
             } else if (result.failed && result.failed.length > 0) {
+              throw new Error('이미지 업로드에 실패했습니다.');
+            }
+          } else if (this.selectedFile) {
+            console.log('📤 기본 파일 업로드 중...', this.selectedFile.name);
+            
+            // 기본 파일 업로드 시스템 사용
+            const uploadResult = await this.uploadSelectedFile(this.selectedFile);
+            
+            if (uploadResult && uploadResult.success) {
+              profileData.avatar = uploadResult.url;
+              console.log('✅ 기본 파일 업로드 완료:', profileData.avatar);
+              
+              // 이미지가 업로드된 경우 AppState와 UI를 바로 업데이트
+              AppState.me = { ...AppState.me, avatar: uploadResult.url };
+            } else {
               throw new Error('이미지 업로드에 실패했습니다.');
             }
           } else if (this.currentImage !== AppState.me?.avatar) {
@@ -1780,7 +1976,7 @@
           const hasStatusChange = profileData.status !== (AppState.me?.status || '');
           const hasAvatarChange = profileData.avatar !== AppState.me?.avatar;
           
-          if (hasNicknameChange || hasStatusChange || (hasAvatarChange && !this.uppy?.getFiles().length)) {
+          if (hasNicknameChange || hasStatusChange || (hasAvatarChange && !this.uppy?.getFiles().length && !this.selectedFile)) {
             console.log('📝 프로필 정보 업데이트 중...');
             await this.updateProfile(profileData);
           } else {
