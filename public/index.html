@@ -1447,7 +1447,7 @@
         }
 
         try {
-          this.uppy = new Uppy.Core({
+          this.uppy = new Uppy({
             restrictions: {
               maxFileSize: 5 * 1024 * 1024, // 5MB
               maxNumberOfFiles: 1,
@@ -4052,13 +4052,17 @@
       try {
         const u = await apiCall('POST', `/api/user/${AppState.userId}`);
         AppState.me = u;
-        DOM.el('#nickname').value = u.nickname || '';
-        DOM.el('#status').value = u.status || '';
-        DOM.el('#avatar').value = u.avatar || '';
-        DOM.el('#clearAvatar').checked = false;
-        DOM.el('#nicknameView').textContent = u.nickname || 'User';
-        DOM.el('#statusView').textContent = u.status || '상태메시지…';
-        DOM.el('#topStatus').textContent = (u.nickname || 'User') + (u.status ? ` — ${u.status}` : '');
+        
+        // 안전한 DOM 요소 업데이트 - 존재하는 요소들만 업데이트
+        const nicknameView = DOM.el('#nicknameView');
+        const statusView = DOM.el('#statusView');
+        const topStatus = DOM.el('#topStatus');
+        
+        if (nicknameView) nicknameView.textContent = u.nickname || 'User';
+        if (statusView) statusView.textContent = u.status || '상태메시지…';
+        if (topStatus) topStatus.textContent = (u.nickname || 'User') + (u.status ? ` — ${u.status}` : '');
+        
+        // 프로필 이미지 설정 (아바타 이미지 요소가 있는 경우)
         setAvatar(u.avatar || '');
         UI.drawTabs();
         
@@ -4066,6 +4070,8 @@
         LazyImageManager.init();
         
         DataManager.fetchAndRender(true);
+        
+        console.log('[INFO] 사용자 정보 로드 완료:', u.nickname);
       } catch (error) {
         console.error('사용자 정보 로드 실패:', error);
       }
@@ -4146,11 +4152,14 @@
       Object.keys(AppState.cache.lastTs).forEach(k=> AppState.cache.lastTs[k]=0);
       Object.keys(AppState.cache.lastDayRendered).forEach(k=> AppState.cache.lastDayRendered[k]='');
       setAvatar('');
-      ['nickname','status','avatar'].forEach(id=>{ const n=DOM.el('#'+id); if(n) n.value=''; });
-      const ca = DOM.el('#clearAvatar'); if (ca) ca.checked = false;
-      DOM.el('#nicknameView').textContent='User';
-      DOM.el('#statusView').textContent='상태메시지…';
-      DOM.el('#topStatus').textContent='—';
+      // 안전한 DOM 요소 초기화 - 존재하는 요소들만 업데이트
+      const nicknameView = DOM.el('#nicknameView');
+      const statusView = DOM.el('#statusView');
+      const topStatus = DOM.el('#topStatus');
+      
+      if (nicknameView) nicknameView.textContent = 'User';
+      if (statusView) statusView.textContent = '상태메시지…';
+      if (topStatus) topStatus.textContent = '—';
       enableUI(false);
 
       DOM.el('#loginName').value='';
