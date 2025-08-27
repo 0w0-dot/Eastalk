@@ -489,37 +489,88 @@ app.put('/api/profile/:userId', async (req, res) => {
     const { userId } = req.params;
     const { nickname, status, avatar, clearAvatar } = req.body;
     
-    let user = await User.findOne({ id: userId });
+    let user;
     const now = nowIso();
     
-    if (user) {
-      const prevNick = user.nickname || '';
-      const prevStatus = user.status || '';
-      const prevAvatar = user.avatar || '';
-      
-      user.nickname = (nickname && nickname.trim()) || prevNick || ('User-' + userId.slice(-5));
-      user.status = (status !== undefined) ? status.trim() : prevStatus;
-      
-      if (clearAvatar) {
-        user.avatar = '';
-      } else if (avatar && avatar.trim()) {
-        user.avatar = avatar.trim();
+    // 환경에 따른 데이터베이스 업데이트
+    if (USE_MEMORY_DB) {
+      user = await MemoryDB.findUser({ id: userId });
+      if (user) {
+        const prevNick = user.nickname || '';
+        const prevStatus = user.status || '';
+        
+        user.nickname = (nickname && nickname.trim()) || prevNick || ('User-' + userId.slice(-5));
+        user.status = (status !== undefined) ? status.trim() : prevStatus;
+        
+        if (clearAvatar) {
+          user.avatar = '';
+        } else if (avatar && avatar.trim()) {
+          user.avatar = avatar.trim();
+        }
+        
+        user.lastSeen = now;
+        user = await MemoryDB.updateUser(userId, user);
+      } else {
+        user = await MemoryDB.createUser({
+          id: userId,
+          nickname: (nickname && nickname.trim()) || ('User-' + userId.slice(-5)),
+          status: (status !== undefined) ? status.trim() : '',
+          avatar: (clearAvatar) ? '' : ((avatar && avatar.trim()) || ''),
+          lastSeen: now,
+          name: '',
+          birth4: ''
+        });
       }
-      
-      user.lastSeen = now;
-      await user.save();
     } else {
-      user = new User({
-        id: userId,
-        nickname: (nickname && nickname.trim()) || ('User-' + userId.slice(-5)),
-        status: (status !== undefined) ? status.trim() : '',
-        avatar: (clearAvatar) ? '' : ((avatar && avatar.trim()) || ''),
-        lastSeen: now,
-        name: '',
-        birth4: ''
-      });
-      await user.save();
+      user = await User.findOne({ id: userId });
+      if (user) {
+        const prevNick = user.nickname || '';
+        const prevStatus = user.status || '';
+        
+        user.nickname = (nickname && nickname.trim()) || prevNick || ('User-' + userId.slice(-5));
+        user.status = (status !== undefined) ? status.trim() : prevStatus;
+        
+        if (clearAvatar) {
+          user.avatar = '';
+        } else if (avatar && avatar.trim()) {
+          user.avatar = avatar.trim();
+        }
+        
+        user.lastSeen = now;
+        await user.save();
+      } else {
+        user = new User({
+          id: userId,
+          nickname: (nickname && nickname.trim()) || ('User-' + userId.slice(-5)),
+          status: (status !== undefined) ? status.trim() : '',
+          avatar: (clearAvatar) ? '' : ((avatar && avatar.trim()) || ''),
+          lastSeen: now,
+          name: '',
+          birth4: ''
+        });
+        await user.save();
+      }
     }
+    
+    // 접속자 정보도 업데이트
+    ConnectedUsersManager.updateUser(
+      ConnectedUsersManager.findByUserId(userId)?.socketId,
+      {
+        nickname: user.nickname,
+        status: user.status,
+        avatar: user.avatar
+      }
+    );
+    
+    // 다른 클라이언트들에게 프로필 변경 알림 (실시간 동기화)
+    io.emit('userProfileUpdated', {
+      userId: user.id,
+      nickname: user.nickname,
+      avatar: user.avatar,
+      status: user.status
+    });
+    
+    console.log(`🔔 API를 통한 프로필 업데이트 알림 전송: ${user.nickname}`);
     
     res.json({
       id: user.id,
@@ -1172,7 +1223,7 @@ app.post('/api/profile-upload', profileUpload.single('image'), async (req, res) 
       }
     } else {
       user = await User.findOneAndUpdate(
-        { userId },
+        { id: userId }, // userId 대신 id 필드 사용
         { 
           avatar: base64Image,
           updatedAt: new Date()
@@ -1190,28 +1241,36 @@ app.post('/api/profile-upload', profileUpload.single('image'), async (req, res) 
       console.log(`✅ MongoDB에서 사용자 ${userId} 프로필 이미지 업데이트 완료`);
     }
 
+    // 접속자 정보도 업데이트
+    const connectedUserInfo = ConnectedUsersManager.findByUserId(userId);
+    if (connectedUserInfo) {
+      ConnectedUsersManager.updateUser(connectedUserInfo.socketId, {
+        avatar: user.avatar
+      });
+    }
+
     // 성공 응답
     res.json({
       success: true,
       message: '프로필 이미지 업로드가 완료되었습니다.',
       url: base64Image,
       user: {
-        userId: user.userId,
+        userId: user.id || userId,
         nickname: user.nickname,
         avatar: user.avatar,
         status: user.status
       }
     });
 
-    // 다른 클라이언트들에게 프로필 업데이트 알림
+    // 다른 클라이언트들에게 프로필 업데이트 알림 (실시간 동기화)
     io.emit('userProfileUpdated', {
-      userId: user.userId,
+      userId: user.id || userId,
       nickname: user.nickname,
       avatar: user.avatar,
       status: user.status
     });
 
-    console.log('🔔 다른 클라이언트들에게 프로필 업데이트 알림 전송');
+    console.log(`🔔 프로필 이미지 업데이트 알림 전송: ${user.nickname}`);
 
   } catch (error) {
     console.error('❌ 프로필 이미지 업로드 오류:', error);
@@ -1448,7 +1507,8 @@ io.on('connection', (socket) => {
       // 접속자 정보도 업데이트
       const updatedUser = ConnectedUsersManager.updateUser(socket.id, {
         nickname: user.nickname,
-        status: user.status
+        status: user.status,
+        avatar: user.avatar
       });
       
       // 성공 응답 전송
@@ -1456,7 +1516,7 @@ io.on('connection', (socket) => {
         success: true,
         message: '프로필이 성공적으로 업데이트되었습니다.',
         user: {
-          userId: user.userId,
+          userId: user.id || user.userId || userId,
           nickname: user.nickname,
           status: user.status,
           avatar: user.avatar
