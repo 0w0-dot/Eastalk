@@ -49,7 +49,9 @@
       --bg:#ffffff; --panel:#ffffff; --line:#e5e7eb;
       --text:#111827; --muted:#6b7280;
       --accent:#ffd400; --accent-ink:#111;
-      --bubble-me:#fff7cc; --bubble-other:#f3f4f6;
+      /* 카카오톡 스타일 말풍선 색상 개선 */
+      --bubble-me:#ffe066; /* 카카오톡 노란색과 유사 */
+      --bubble-other:#ffffff; /* 깔끔한 흰색 배경 */
 
       --radius-sm:10px; --radius-md:12px; --radius-lg:16px;
       --shadow-1:0 1px 2px rgba(0,0,0,.06);
@@ -156,7 +158,8 @@
       overflow-y: auto;
       overflow-x: hidden;
       padding: 12px;
-      padding-bottom: 96px;
+      /* 메시지와 입력창 사이 충분한 여백 확보 */
+      padding-bottom: 120px;
       display: flex;
       flex-direction: column;
       gap: 8px;
@@ -211,8 +214,26 @@
     .message-container{ display:flex; align-items:flex-end; gap:6px; max-width:86%; }
     .msg-row.me .message-container{ flex-direction:row-reverse; }
     
-    .bubble{ padding:12px 14px; border:1px solid var(--line); border-radius:16px; line-height:1.42; background:var(--bubble-other); box-shadow:var(--shadow-1); flex:1; }
-    .msg-row.me .bubble{ background:var(--bubble-me); }
+    .bubble{ 
+      /* 카카오톡 스타일: 조금 더 둥글게, 조금 더 간결하게 */
+      padding: 10px 14px;
+      border: none; /* 카카오톡은 보더 없음 */
+      border-radius: 18px; /* 더 둥근 모서리 */
+      line-height: 1.5;
+      background: var(--bubble-other);
+      /* 카카오톡 스타일 그림자 */
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+      flex: 1;
+      /* 더 부드러운 타이포그래피 */
+      word-break: break-word;
+      word-wrap: break-word;
+    }
+    .msg-row.me .bubble{ 
+      background: var(--bubble-me);
+      /* 내 메시지는 오른쪽 정렬을 위한 스타일 */
+      margin-left: auto;
+      margin-right: 0;
+    }
     
     /* 🔗 답글 버튼 스타일 */
     .reply-btn{
@@ -681,32 +702,43 @@
       }
       .tabs .tab{ max-width:70vw; }
       
-      /* Apple HIG: 소형 모바일에서도 적절한 터치 타겟 */
-      .btn-icon {
-        width: 48px !important;
-        height: 48px !important;
-        font-size: 20px !important;
+      /* 소형 모바일: 입력창 버튼만 적절한 크기 유지 */
+      .composer .btn-icon {
+        width: 44px !important;
+        height: 44px !important;
+        font-size: 18px !important;
         border-radius: 10px !important;
       }
       
-      .btn {
-        min-height: 48px !important;
-        height: 48px !important;
-        font-size: 16px !important;
+      .composer .btn {
+        min-height: 44px !important;
+        height: 44px !important;
+        font-size: 14px !important;
         border-radius: 10px !important;
-        padding: 0 18px !important;
+        padding: 0 14px !important;
+      }
+      
+      /* 헤더 버튼들은 더 작게 */
+      header .btn {
+        min-height: 32px !important;
+        height: 32px !important;
+        padding: 0 10px !important;
+        font-size: 12px !important;
+        max-width: 100px;
       }
       
       /* 더 작은 화면에서 여백 최적화 */
       .composer {
-        margin-bottom: 16px;
-        padding: 10px 16px;
-        gap: 10px;
+        /* 소형 모바일에서도 대칭적 여백 유지 */
+        margin-bottom: 12px;
+        margin-top: 12px;
+        padding: 6px 16px;
+        gap: 8px;
       }
       
       .wrap {
-        /* Apple HIG: 작은 화면 대응 */
-        padding-bottom: calc(75px + max(8px, env(safe-area-inset-bottom)));
+        /* 소형 모바일도 동일한 비율 유지 */
+        padding-bottom: calc(68px + max(12px, env(safe-area-inset-bottom)));
       }
       
       /* 소형 모바일에서 더 작은 접속자 아바타 적용 */
@@ -717,15 +749,108 @@
       .connected-users .users-grid{ gap:3px; }
     }
 
-    /* ===== Day separator (카톡 스타일) ===== */
-    .day-sep{ display:flex; align-items:center; gap:12px; margin:12px 0; color:var(--muted); font-size:12px; }
-    .day-sep::before,.day-sep::after{ content:""; flex:1; height:1px; background:var(--line); }
-    .day-chip{ background:#fff; border:1px solid var(--line); border-radius:999px; padding:4px 10px; }
+    /* ===== Day separator (카톡 스타일 개선) ===== */
+    .day-sep{ 
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 16px 0;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .day-sep::before, .day-sep::after{ 
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: rgba(0, 0, 0, 0.08); /* 카카오톡 스타일 연한 라인 */
+    }
+    .day-chip{ 
+      background: rgba(0, 0, 0, 0.05); /* 카카오톡 스타일 연한 배경 */
+      border: none;
+      border-radius: 12px;
+      padding: 6px 12px;
+      font-size: 11px;
+      font-weight: 500;
+      color: #666;
+    }
     body.win98 .day-sep::before, body.win98 .day-sep::after{ background:#808080; }
     body.win98 .day-chip{
       background:#c0c0c0;
       border:2px solid #c0c0c0; border-top-color:#fff; border-left-color:#fff;
       border-right-color:#404040; border-bottom-color:#404040;
+    }
+
+    /* ===== 카카오톡 스타일 메시지 그룹핑 ===== */
+    .msg-group {
+      margin-bottom: 8px;
+    }
+    
+    /* 연속 메시지 그룹에서 첫 번째 메시지 */
+    .msg-row.first-in-group .bubble {
+      margin-bottom: 2px;
+    }
+    
+    /* 연속 메시지 그룹에서 마지막 메시지 */
+    .msg-row.last-in-group .bubble {
+      margin-bottom: 8px;
+    }
+    
+    /* 연속 메시지에서 중간 메시지들 */
+    .msg-row.middle-in-group {
+      margin-bottom: 2px;
+    }
+    
+    /* 카카오톡 스타일: 연속 메시지의 보다 자연스러운 모서리 */
+    .msg-row.first-in-group .bubble {
+      border-bottom-left-radius: 6px; /* 대화 상대방 쪽 모서리 줄임 */
+    }
+    
+    .msg-row.first-in-group.me .bubble {
+      border-bottom-right-radius: 6px; /* 내 메시지 오른쪽 모서리 줄임 */
+      border-bottom-left-radius: 18px; /* 왼쪽은 유지 */
+    }
+    
+    .msg-row.middle-in-group .bubble {
+      border-bottom-left-radius: 6px;
+      border-top-left-radius: 6px;
+    }
+    
+    .msg-row.middle-in-group.me .bubble {
+      border-bottom-right-radius: 6px;
+      border-top-right-radius: 6px;
+      border-bottom-left-radius: 18px;
+      border-top-left-radius: 18px;
+    }
+    
+    .msg-row.last-in-group .bubble {
+      border-top-left-radius: 6px;
+      border-bottom-left-radius: 18px; /* 마지막은 다시 원래대로 */
+    }
+    
+    .msg-row.last-in-group.me .bubble {
+      border-top-right-radius: 6px;
+      border-bottom-right-radius: 18px;
+      border-top-left-radius: 18px;
+      border-bottom-left-radius: 18px;
+    }
+
+    /* ===== 연속 메시지 메타 정보 최소화 ===== */
+    .msg-row.middle-in-group .meta,
+    .msg-row.first-in-group .meta {
+      opacity: 0.3;
+      font-size: 10px;
+    }
+    
+    /* 카카오톡 스타일: 반응 버튼 위치 조정 */
+    .msg-row .add-react {
+      margin-top: 4px;
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.05);
+      border: none;
+      padding: 4px 8px;
+      font-size: 11px;
+      color: #666;
     }
 
     /* ===== Load More Button ===== */
@@ -1329,8 +1454,8 @@
       background: var(--panel);
       border-top: 1px solid var(--line);
       z-index: 50;
-      /* Apple HIG: Safe area handling */
-      padding: 12px 0 max(12px, env(safe-area-inset-bottom));
+      /* 파란색 선끼리 여백 동일하게 - 헤더 패딩과 맞춰서 6px 적용 */
+      padding: 6px 0 max(6px, env(safe-area-inset-bottom));
       /* iOS-style backdrop blur */
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
@@ -1347,13 +1472,13 @@
 
     .mobile-nav-buttons {
       display: flex;
-      justify-content: center;
+      justify-content: space-around;
       align-items: center;
       max-width: 100%;
       margin: 0 auto;
-      /* Apple HIG: 60pt center-to-center spacing */
-      gap: 32px;
-      padding: 0 24px;
+      /* 더 균등하게 배치 */
+      gap: 8px;
+      padding: 0 16px;
     }
 
     .mobile-nav-btn {
@@ -1365,19 +1490,23 @@
       border: none;
       color: var(--text);
       /* Apple HIG: Minimum 11pt font size for mobile */
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 500;
       letter-spacing: 0.01em;
       cursor: pointer;
-      border-radius: 12px;
+      border-radius: 8px;
       transition: background-color 0.15s ease;
-      /* Apple HIG: 44x44pt minimum touch target */
-      width: 64px;
-      height: 56px;
-      padding: 6px;
+      /* Apple HIG: 44x44pt minimum touch target but smaller for better fit */
+      width: 52px;
+      height: 48px;
+      padding: 4px;
       /* iOS-style button appearance */
       -webkit-tap-highlight-color: transparent;
       touch-action: manipulation;
+      /* 글자 오버플로우 방지 */
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .mobile-nav-btn:hover {
@@ -1385,8 +1514,8 @@
     }
 
     .mobile-nav-btn .icon {
-      font-size: 24px;
-      margin-bottom: 2px;
+      font-size: 20px;
+      margin-bottom: 1px;
       /* Better icon alignment */
       line-height: 1;
       display: block;
@@ -1399,44 +1528,71 @@
 
       /* Adjust main content to account for mobile nav */
       .wrap {
-        /* Apple HIG: Account for mobile nav height + safe area */
-        padding-bottom: calc(80px + max(12px, env(safe-area-inset-bottom)));
+        /* 모바일 네비 높이(48px) + 패딩(12px*2) + safe area */
+        padding-bottom: calc(60px + max(6px, env(safe-area-inset-bottom)));
+      }
+      
+      /* 메시지 영역 하단 여백: 입력창 높이 + 입력창 마진 */
+      .messages {
+        padding-bottom: calc(60px + 12px) !important; /* 입력창 + 위아래 마진(6px*2) */
+        margin-bottom: 0;
       }
 
       /* Mobile chat input improvements */
       .composer {
-        /* Apple HIG: 16pt minimum spacing */
-        margin-bottom: 20px;
-        padding: 0 20px;
+        /* 빨간색 선끼리 여백 동일하게 - 더 작은 값으로 6px 적용 */
+        margin-bottom: 6px;
+        margin-top: 6px;
+        padding: 8px 20px;
         /* Improved safe area handling */
         padding-left: max(20px, env(safe-area-inset-left));
         padding-right: max(20px, env(safe-area-inset-right));
+        /* 더 깔끔한 배경 분리 */
+        border-top: 1px solid rgba(0, 0, 0, 0.06);
       }
 
-      /* Apple HIG: Mobile button improvements */
-      .btn-icon {
-        width: 52px !important;
-        height: 52px !important;
-        min-width: 52px !important;
-        min-height: 52px !important;
-        font-size: 22px !important;
+      /* 메시지 입력창 버튼들만 크게 유지 */
+      .composer .btn-icon {
+        width: 48px !important;
+        height: 48px !important;
+        min-width: 48px !important;
+        min-height: 48px !important;
+        font-size: 20px !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
-        /* iOS-style touch feedback */
-        -webkit-tap-highlight-color: transparent;
-        touch-action: manipulation;
         border-radius: 12px !important;
       }
 
-      .btn {
-        min-height: 52px !important;
-        height: 52px !important;
-        padding: 0 24px !important;
-        /* Apple HIG: Better touch targets */
-        -webkit-tap-highlight-color: transparent;
-        touch-action: manipulation;
+      .composer .btn {
+        min-height: 48px !important;
+        height: 48px !important;
+        padding: 0 16px !important;
+        font-size: 15px !important;
+        font-weight: 600 !important;
         border-radius: 12px !important;
+        /* 글자 오버플로우 방지 */
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      
+      /* 헤더 버튼들은 작게 유지 */
+      header .btn,
+      .tabs .btn,
+      .mobile-nav .btn {
+        min-height: 36px !important;
+        height: 36px !important;
+        padding: 0 12px !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        border-radius: 8px !important;
+        /* 글자 오버플로우 방지 */
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 120px;
+      }
         font-size: 16px !important;
       }
     }
