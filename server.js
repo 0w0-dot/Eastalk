@@ -63,6 +63,30 @@ webpush.setVapidDetails(
 
 console.log(`🔔 VAPID Subject 설정: ${VAPID_EMAIL}`);
 
+// 🧹 메모리 최적화: 가비지 컬렉션 강화
+if (global.gc) {
+  console.log('🧹 가비지 컬렉션 시스템 활성화');
+  // 20초마다 강제 가비지 컬렉션 실행
+  setInterval(() => {
+    const used = process.memoryUsage();
+    global.gc();
+    const afterGC = process.memoryUsage();
+    console.log(`🧹 메모리 정리: ${Math.round((used.heapUsed - afterGC.heapUsed) / 1024 / 1024)}MB 회수`);
+  }, 20000);
+} else {
+  console.log('⚠️ 가비지 컬렉션 비활성화 (--expose-gc 플래그 필요)');
+}
+
+// 캐시 관리: 임시 데이터 자동 정리
+const cache = new Map();
+setInterval(() => {
+  const size = cache.size;
+  cache.clear();
+  if (size > 0) {
+    console.log(`🧹 캐시 정리: ${size}개 항목 제거`);
+  }
+}, 300000); // 5분마다
+
 // Render 프록시 신뢰 설정 (Rate Limiter 오류 해결)
 app.set('trust proxy', 1);
 
@@ -85,14 +109,40 @@ app.use(limiter);
 // 정적 파일 제공
 app.use(express.static('public'));
 
-// 🐛 API 요청 디버깅 미들웨어
+// 🔍 API 요청 로깅 미들웨어 (메모리 효율 개선)
 app.use('/api', (req, res, next) => {
-  console.log(`🔍 API 요청: ${req.method} ${req.path}`);
-  console.log('📋 요청 헤더:', req.headers['content-type']);
-  if (req.body && Object.keys(req.body).length > 0) {
-    console.log('📦 요청 본문:', req.body);
+  const startTime = Date.now();
+  
+  // 프로덕션에서는 상세 로깅 축소
+  if (!isProduction) {
+    console.log(`🔍 API 요청: ${req.method} ${req.path}`);
+    if (req.body && Object.keys(req.body).length > 0) {
+      console.log('📦 요청 본문:', JSON.stringify(req.body).slice(0, 200) + '...');
+    }
   }
+  
+  // 응답 완료 시 성능 측정
+  res.on('finish', () => {
+    const duration = Date.now() - startTime;
+    if (duration > 1000) { // 1초 이상 걸린 요청만 로깅
+      console.log(`⚠️ 느린 API: ${req.method} ${req.path} (${duration}ms)`);
+    }
+  });
+  
   next();
+});
+
+// 🚨 글로벌 에러 핸들러 (강화)
+app.use((err, req, res, next) => {
+  console.error('🚨 서버 오류:', err.stack);
+  
+  // 메모리 누수 방지를 위한 에러 객체 정리
+  const errorResponse = {
+    error: isProduction ? 'Internal Server Error' : err.message,
+    timestamp: new Date().toISOString()
+  };
+  
+  res.status(500).json(errorResponse);
 });
 
 // Service Worker 파일에 올바른 Content-Type 설정
@@ -133,9 +183,11 @@ if (USE_MEMORY_DB) {
   console.log(`🌍 환경: ${process.env.NODE_ENV || 'development'}`);
 } else {
   mongoose.connect(MONGODB_URI, {
-    maxPoolSize: 10,
+    maxPoolSize: 2,        // 10 → 2로 대폭 감소 (메모리 절약)
     serverSelectionTimeoutMS: 5000,
     socketTimeoutMS: 45000,
+    maxIdleTimeMS: 30000,  // 유휴 연결 빠른 해제
+    family: 4              // IPv4 강제 사용 (연결 속도 개선)
   })
   .then(async () => {
     console.log('✅ MongoDB 연결 성공');
