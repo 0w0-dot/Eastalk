@@ -515,6 +515,62 @@
       color: var(--accent-ink);
     }
 
+    /* 임시 선택된 상태 스타일 */
+    .status-option.selected {
+      background: rgba(0, 123, 255, 0.1);
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+
+    .status-option.selected .status-option-name {
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .status-option.selected .status-option-desc {
+      color: var(--accent);
+    }
+
+    /* 저장/취소 버튼 스타일 */
+    .status-actions {
+      padding: 12px;
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      border-top: 1px solid var(--border);
+      background: #fafafa;
+    }
+
+    .status-cancel-btn,
+    .status-save-btn {
+      padding: 8px 16px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .status-cancel-btn {
+      background: white;
+      color: var(--text);
+    }
+
+    .status-cancel-btn:hover {
+      background: #f5f5f5;
+    }
+
+    .status-save-btn {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+    }
+
+    .status-save-btn:hover {
+      background: #0056b3;
+      border-color: #0056b3;
+    }
+
     /* ===== Mobile layout tweaks ===== */
     /* Profile Button - Now Always Visible */
     #profileBtn{ display:inline-flex; }
@@ -1296,6 +1352,7 @@
 
     // Current work status
     let currentWorkStatus = 'offline';
+    let selectedWorkStatus = 'offline'; // 임시 선택 상태
 
     /* ===== 전역 스크롤 네비게이션 함수 ===== */
     // 🔗 답글 클릭시 원본 메시지로 스크롤하는 전역 함수 (즉시 정의)
@@ -2126,11 +2183,13 @@
     function openWorkStatusSelector() {
       const modal = document.getElementById('workStatusModal');
       if (modal) {
+        // 선택된 상태를 현재 상태로 초기화
+        selectedWorkStatus = currentWorkStatus;
+        
         modal.style.display = 'grid';
-        // Update active status
-        document.querySelectorAll('.status-option').forEach(btn => {
-          btn.classList.toggle('active', btn.dataset.status === currentWorkStatus);
-        });
+        
+        // 선택 상태 UI 업데이트
+        updateWorkStatusSelection();
       }
     }
 
@@ -2141,23 +2200,62 @@
       }
     }
 
-    function selectWorkStatus(status) {
-      currentWorkStatus = status;
+    // 임시 선택 함수 (저장하지 않고 선택만)
+    function selectWorkStatusTemp(status) {
+      selectedWorkStatus = status;
+      updateWorkStatusSelection();
+      console.log(`🔄 임시 업무 상태 선택: ${status}`);
+    }
+
+    // 업무 상태 선택 UI 업데이트
+    function updateWorkStatusSelection() {
+      const buttons = document.querySelectorAll('.status-option');
+      buttons.forEach(btn => {
+        const btnStatus = btn.dataset.status;
+        if (btnStatus === selectedWorkStatus) {
+          btn.classList.add('selected');
+        } else {
+          btn.classList.remove('selected');
+        }
+      });
+    }
+
+    // 업무 상태 변경 저장
+    function saveWorkStatusChange() {
+      const previousStatus = currentWorkStatus;
+      currentWorkStatus = selectedWorkStatus;
       updateWorkStatusDisplay();
       closeWorkStatusSelector();
       
       // Save to localStorage
       if (window.localStorage) {
-        localStorage.setItem('workStatus', status);
+        localStorage.setItem('workStatus', currentWorkStatus);
       }
       
-      // TODO: Send to server via Socket.IO
+      // Send to server via Socket.IO
       if (window.socket && window.socket.connected) {
+        console.log(`🔄 서버로 업무 상태 변경 전송: ${previousStatus} → ${currentWorkStatus}`);
         socket.emit('updateWorkStatus', {
-          status: status,
+          status: currentWorkStatus,
           timestamp: Date.now()
         });
+      } else {
+        console.warn('⚠️ 소켓이 연결되지 않아 업무 상태를 서버에 전송할 수 없습니다');
       }
+    }
+
+    // 업무 상태 변경 취소
+    function cancelWorkStatusChange() {
+      selectedWorkStatus = currentWorkStatus; // 선택을 현재 상태로 되돌림
+      updateWorkStatusSelection();
+      closeWorkStatusSelector();
+      console.log(`🔄 업무 상태 변경 취소됨`);
+    }
+
+    // 기존 selectWorkStatus 함수 (하위 호환성)
+    function selectWorkStatus(status) {
+      selectWorkStatusTemp(status);
+      saveWorkStatusChange();
     }
 
     function updateWorkStatusDisplay() {
@@ -5218,41 +5316,45 @@
         <button class="status-close" onclick="closeWorkStatusSelector()">✕</button>
       </div>
       <div class="status-options">
-        <button class="status-option" data-status="ticketing" onclick="selectWorkStatus('ticketing')">
+        <button class="status-option" data-status="ticketing" onclick="selectWorkStatusTemp('ticketing')">
           <span class="status-option-icon">🎫</span>
           <div class="status-option-info">
             <div class="status-option-name">발권</div>
             <div class="status-option-desc">발권 업무 진행 중</div>
           </div>
         </button>
-        <button class="status-option" data-status="checking" onclick="selectWorkStatus('checking')">
+        <button class="status-option" data-status="checking" onclick="selectWorkStatusTemp('checking')">
           <span class="status-option-icon">✅</span>
           <div class="status-option-info">
             <div class="status-option-name">검표</div>
             <div class="status-option-desc">검표 업무 진행 중</div>
           </div>
         </button>
-        <button class="status-option" data-status="patrol" onclick="selectWorkStatus('patrol')">
+        <button class="status-option" data-status="patrol" onclick="selectWorkStatusTemp('patrol')">
           <span class="status-option-icon">🚶</span>
           <div class="status-option-info">
             <div class="status-option-name">순찰</div>
             <div class="status-option-desc">순찰 중</div>
           </div>
         </button>
-        <button class="status-option" data-status="artshop" onclick="selectWorkStatus('artshop')">
+        <button class="status-option" data-status="artshop" onclick="selectWorkStatusTemp('artshop')">
           <span class="status-option-icon">🎨</span>
           <div class="status-option-info">
             <div class="status-option-name">아트샵</div>
             <div class="status-option-desc">아트샵 업무 중</div>
           </div>
         </button>
-        <button class="status-option" data-status="offline" onclick="selectWorkStatus('offline')">
+        <button class="status-option" data-status="offline" onclick="selectWorkStatusTemp('offline')">
           <span class="status-option-icon">⚪</span>
           <div class="status-option-info">
             <div class="status-option-name">오프라인</div>
             <div class="status-option-desc">업무 종료</div>
           </div>
         </button>
+      </div>
+      <div class="status-actions">
+        <button class="status-cancel-btn" onclick="cancelWorkStatusChange()">취소</button>
+        <button class="status-save-btn" onclick="saveWorkStatusChange()">저장</button>
       </div>
     </div>
   </div>
