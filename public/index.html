@@ -2295,8 +2295,21 @@
       updateModalWorkStatus();
     }
 
-    function updateModalWorkStatus() {
-      const status = WorkStatus[currentWorkStatus] || WorkStatus.offline;
+    function updateModalWorkStatus(targetUserId = null) {
+      // 대상 사용자의 업무 상태 찾기
+      let workStatusToShow = currentWorkStatus; // 기본값: 자신의 상태
+      
+      if (targetUserId && targetUserId !== AppState.userId) {
+        // 다른 사용자의 프로필을 보는 경우, 접속자 목록에서 해당 사용자의 업무 상태 찾기
+        const targetUser = AppState.connectedUsers.find(u => u.userId === targetUserId);
+        if (targetUser && targetUser.workStatus) {
+          workStatusToShow = targetUser.workStatus;
+        } else {
+          workStatusToShow = 'offline'; // 업무 상태가 없으면 오프라인으로 표시
+        }
+      }
+      
+      const status = WorkStatus[workStatusToShow] || WorkStatus.offline;
       
       // Update modal work status display
       const modalStatusIcon = document.getElementById('modalStatusIcon');
@@ -2306,6 +2319,8 @@
       if (modalStatusIcon) modalStatusIcon.textContent = status.icon;
       if (modalStatusText) modalStatusText.textContent = status.text;
       if (modalStatusDesc) modalStatusDesc.textContent = status.description || (status.text === '오프라인' ? '업무 종료' : '업무 중');
+      
+      console.log(`💼 모달 업무 상태 업데이트: ${targetUserId || 'self'} → ${workStatusToShow}`);
     }
 
 
@@ -4123,7 +4138,7 @@
     }
 
     /* ===== Profile Modal ===== */
-    function showProfileModal(nickname, avatar, status){
+    function showProfileModal(nickname, avatar, status, userId = null){
       DOM.el('#pname').textContent = nickname || 'User';
       DOM.el('#pstatus').textContent = status ? status : '상태메시지 없음';
       const img = DOM.el('#pimg');
@@ -4136,8 +4151,8 @@
         img.style.display='none';
       }
       
-      // 현재 업무 상태 표시 업데이트
-      updateModalWorkStatus();
+      // 해당 사용자의 업무 상태 표시 업데이트
+      updateModalWorkStatus(userId);
       
       DOM.el('#pmodal').classList.add('show');
       DOM.el('#pmodal').setAttribute('aria-hidden','false');
@@ -4152,12 +4167,12 @@
       window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') hideProfileModal(); });
     }
     async function openProfile(uid, fallbackNick, fallbackAvatar){
-      showProfileModal(fallbackNick, fallbackAvatar, '불러오는 중…');
+      showProfileModal(fallbackNick, fallbackAvatar, '불러오는 중…', uid);
       try {
         const profile = await apiCall('GET', `/api/profile/${uid}`);
-        showProfileModal(profile.nickname || fallbackNick, profile.avatar || fallbackAvatar, profile.status || '');
+        showProfileModal(profile.nickname || fallbackNick, profile.avatar || fallbackAvatar, profile.status || '', uid);
       } catch (error) {
-        showProfileModal(fallbackNick, fallbackAvatar, '');
+        showProfileModal(fallbackNick, fallbackAvatar, '', uid);
       }
     }
 
@@ -5089,12 +5104,23 @@
     // 업무 상태 변경 실시간 동기화 처리
     socket.on('userWorkStatusUpdated', (data) => {
       console.log(`🔄 업무 상태 변경 수신:`, data);
-      // ConnectedUsersUI.updateUser를 통해 접속자 목록의 업무 상태 업데이트
-      ConnectedUsersUI.updateUser({
-        userId: data.userId,
-        nickname: data.nickname,
-        status: data.status
-      });
+      
+      // 접속자 목록에서 해당 사용자 찾기
+      const existingIndex = AppState.connectedUsers.findIndex(u => u.userId === data.userId);
+      if (existingIndex >= 0) {
+        // 기존 사용자의 업무 상태만 업데이트 (프로필 상태는 유지)
+        AppState.connectedUsers[existingIndex] = { 
+          ...AppState.connectedUsers[existingIndex], 
+          workStatus: data.status  // workStatus 필드로 업무 상태 저장
+        };
+        
+        // 접속자 목록 다시 렌더링
+        ConnectedUsersUI.render(AppState.connectedUsers);
+        
+        console.log(`✅ 접속자 ${data.nickname}의 업무 상태가 ${data.status}로 업데이트됨`);
+      } else {
+        console.warn(`⚠️ 접속자 목록에서 사용자 ${data.userId}를 찾을 수 없음`);
+      }
     });
 
     /* ===== iOS 주소창 높이 변동 대응용 --vh 세팅 ===== */
