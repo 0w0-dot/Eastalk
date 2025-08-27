@@ -1465,9 +1465,9 @@ io.on('connection', (socket) => {
         }
       });
       
-      // 다른 클라이언트들에게 프로필 변경 알림
-      io.emit('userProfileUpdated', {
-        userId: user.userId,
+      // 다른 클라이언트들에게 프로필 변경 알림 (본인 제외)
+      socket.broadcast.emit('userProfileUpdated', {
+        userId: user.id || user.userId || userId,
         nickname: user.nickname,
         avatar: user.avatar,
         status: user.status
