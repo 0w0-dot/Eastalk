@@ -1086,6 +1086,44 @@ const profileUpload = multer({
   }
 });
 
+// 🔧 Multer 없는 임시 프로필 업로드 엔드포인트 (base64 방식)
+console.log('🔧 임시 프로필 이미지 업로드 API 등록 중...');
+app.post('/api/profile-upload-temp', async (req, res) => {
+  try {
+    console.log('📤 임시 프로필 이미지 업로드 요청 받음');
+    
+    const { userId, imageData } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'userId가 필요합니다.'
+      });
+    }
+    
+    if (!imageData) {
+      return res.status(400).json({
+        success: false,
+        error: '이미지 데이터가 필요합니다.'
+      });
+    }
+    
+    // 임시로 성공 응답만 반환
+    return res.json({
+      success: true,
+      url: imageData, // 클라이언트에서 보낸 base64 데이터를 그대로 반환
+      message: '임시 업로드 성공 (Multer 대신 base64 처리)'
+    });
+    
+  } catch (error) {
+    console.error('❌ 임시 프로필 업로드 오류:', error);
+    return res.status(500).json({
+      success: false,
+      error: '임시 업로드 처리 중 오류가 발생했습니다.'
+    });
+  }
+});
+
 // 프로필 이미지 업로드 API
 console.log('🔧 프로필 이미지 업로드 API 라우트 등록 중...');
 app.post('/api/profile-upload', profileUpload.single('image'), async (req, res) => {

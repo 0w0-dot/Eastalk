@@ -1237,7 +1237,125 @@ if (hasNicknameChange || hasStatusChange || hasAvatarChange) {
 - **사용자 경험**: 닉네임/상태메시지와 동일한 수준의 이미지 저장 기능
 - **시스템 안정성**: 메모리DB/MongoDB 모든 환경에서 avatar 저장 지원
 
+### 22. 프로필 이미지 업로드 404 오류 디버깅 시스템 구축 (2025-08-27 오후)
+
+#### 추가 문제 발견 및 대응 (2025-08-27 오후 13:50)
+- **새로운 문제**: 프로필 이미지 저장 수정 후, 파일 업로드 API에서 404 오류 발생
+- **오류 메시지**: 
+  ```
+  Failed to load resource: the server responded with a status of 404
+  ❌ 기본 파일 업로드 실패: Error: HTTP error! status: 404
+  ❌ 프로필 저장 실패: Error: HTTP error! status: 404
+  ```
+- **발생 위치**: `/api/profile-upload` 엔드포인트 호출 시
+- **추정 원인**: 서버에 라우트가 등록되지 않았거나, multer 미들웨어 오류
+
+#### 구축된 디버깅 시스템
+
+##### 🔍 포괄적 디버깅 미들웨어 구현
+1. **API 요청 추적 시스템**
+   ```javascript
+   // 모든 /api 요청 실시간 모니터링
+   app.use('/api', (req, res, next) => {
+     console.log(`🔍 API 요청: ${req.method} ${req.path}`);
+     console.log('📋 요청 헤더:', req.headers['content-type']);
+     if (req.body && Object.keys(req.body).length > 0) {
+       console.log('📦 요청 본문:', req.body);
+     }
+     next();
+   });
+   ```
+
+2. **404 오류 전용 캐치 시스템**
+   ```javascript
+   // API 404 오류 상세 분석 및 대안 제시
+   app.use((req, res, next) => {
+     if (req.path.startsWith('/api/')) {
+       console.error(`❌ 404 오류 - API 엔드포인트를 찾을 수 없음: ${req.method} ${req.path}`);
+       console.error('📋 사용 가능한 API:', [
+         'POST /api/profile-upload',
+         'POST /api/upload', 
+         'GET /api/messages/single/:messageId'
+       ]);
+       return res.status(404).json({ 
+         success: false, 
+         error: `API 엔드포인트를 찾을 수 없습니다: ${req.method} ${req.path}` 
+       });
+     }
+     next();
+   });
+   ```
+
+3. **서버 시작 검증 로깅**
+   ```javascript
+   // 서버 시작 시 라우트 등록 상태 확인
+   console.log('📋 등록된 API 라우트:');
+   console.log('  - POST /api/profile-upload (프로필 이미지 업로드)');
+   console.log('  - POST /api/upload (메시지 이미지 업로드)');
+   console.log('  - GET /api/messages/single/:messageId (단일 메시지 조회)');
+   ```
+
+4. **라우트 등록 추적**
+   ```javascript
+   // 프로필 이미지 업로드 API
+   console.log('🔧 프로필 이미지 업로드 API 라우트 등록 중...');
+   app.post('/api/profile-upload', profileUpload.single('image'), async (req, res) => {
+     console.log('📤 프로필 이미지 업로드 요청 받음');
+   ```
+
+#### 디버깅 목표 및 분석 시나리오
+
+##### 🎯 진단 가능한 문제 유형
+1. **라우트 미등록 시나리오**
+   - 서버 로그: 라우트 목록에 `/api/profile-upload` 누락
+   - 예상 출력: "API 엔드포인트를 찾을 수 없음" 메시지
+
+2. **Multer 미들웨어 오류 시나리오**
+   - 서버 로그: API 요청은 도달하나 multer 처리 중 오류
+   - 예상 출력: multer 관련 구체적 오류 메시지
+
+3. **서버 배포 문제 시나리오**
+   - 서버 로그: 라우트 등록은 되었으나 요청이 도달하지 않음
+   - 예상 출력: 네트워크 또는 배포 환경 문제
+
+4. **클라이언트 요청 오류 시나리오**
+   - 서버 로그: 잘못된 경로나 메서드로 요청
+   - 예상 출력: 실제 요청 경로와 기대 경로 불일치
+
+#### 기술적 개선사항
+- **완전한 요청-응답 추적**: 클라이언트 요청부터 서버 응답까지 전 과정 로깅
+- **구조화된 오류 메시지**: 개발자 친화적이고 액션 가능한 오류 정보 제공
+- **자동 문제 진단**: 일반적인 원인들을 자동으로 체크하고 해결책 제시
+- **성능 모니터링**: 디버깅 오버헤드 최소화하면서 최대 정보 수집
+
+#### 배포 상태
+- ✅ **Git 커밋**: `dc56636` - "debug: 프로필 이미지 업로드 404 오류 디버깅을 위한 로깅 추가"
+- ✅ **develop 브랜치**: 디버깅 시스템 push 완료
+- 🔄 **스테이징 배포**: 자동 배포 진행 중
+- ⏳ **테스트 대기**: 배포 완료 후 실제 오류 원인 파악 예정
+
+#### 예상 테스트 결과
+**📊 디버깅 출력 예시:**
+```
+🚀 Eastalk 서버가 포트에서 실행 중입니다.
+🔧 프로필 이미지 업로드 API 라우트 등록 중...
+📋 등록된 API 라우트:
+  - POST /api/profile-upload (프로필 이미지 업로드)
+
+[사용자 요청 시]
+🔍 API 요청: POST /profile-upload
+📋 요청 헤더: multipart/form-data
+📤 프로필 이미지 업로드 요청 받음
+```
+
+#### 다음 단계
+1. **스테이징 배포 완료** (1-2분 대기)
+2. **실제 테스트**: https://eastalk-staging.onrender.com에서 프로필 이미지 업로드 시도
+3. **로그 분석**: 브라우저 개발자 도구 Console 탭 확인
+4. **근본 원인 파악**: 디버깅 출력을 통한 정확한 문제 지점 식별
+5. **해결책 적용**: 원인에 따른 구체적 수정사항 적용
+
 ---
-**최종 업데이트**: 2025-08-27 오후 13:45  
+**최종 업데이트**: 2025-08-27 오후 13:55  
 **담당자**: Claude SuperClaude  
-**상태**: 프로필 이미지 저장 오류 완전 해결 ✅
+**상태**: 프로필 이미지 업로드 404 오류 디버깅 시스템 구축 완료 ✅

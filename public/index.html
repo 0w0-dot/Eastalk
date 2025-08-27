@@ -1758,6 +1758,62 @@
 
         } catch (error) {
           console.error('❌ 기본 파일 업로드 실패:', error);
+          
+          // 404 오류인 경우 base64 fallback 시도
+          if (error.message.includes('404')) {
+            console.log('🔄 Multer 업로드 실패, base64 방식으로 전환...');
+            return await this.uploadFileAsBase64(file);
+          }
+          
+          throw error;
+        }
+      }
+
+      // Base64 방식 파일 업로드 (Multer 대안)
+      async uploadFileAsBase64(file) {
+        try {
+          console.log('📋 Base64 파일 업로드 시작:', file.name);
+          
+          // 파일을 base64로 변환
+          const base64Data = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+          
+          console.log('🔄 파일을 base64로 변환 완료');
+          
+          // 서버에 base64 데이터 전송
+          const response = await fetch('/api/profile-upload-temp', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              userId: AppState.userId,
+              imageData: base64Data,
+              fileName: file.name,
+              fileSize: file.size
+            })
+          });
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          
+          const result = await response.json();
+          console.log('📤 Base64 업로드 서버 응답:', result);
+          
+          if (result.success && result.url) {
+            console.log('✅ Base64 파일 업로드 성공:', result.url);
+            return result;
+          } else {
+            throw new Error('Base64 업로드 서버 응답에 오류가 있습니다.');
+          }
+          
+        } catch (error) {
+          console.error('❌ Base64 파일 업로드 실패:', error);
           throw error;
         }
       }
