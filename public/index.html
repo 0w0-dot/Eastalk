@@ -273,18 +273,37 @@
 
     /* Composer (safe-area 고려) */
     .composer{
-      display:flex; gap:8px; 
-      padding:10px; 
-      padding-left:max(10px, env(safe-area-inset-left));
-      padding-right:max(10px, env(safe-area-inset-right));
-      padding-bottom:max(10px, env(safe-area-inset-bottom));
-      border-top:1px solid var(--line);
-      background:#fff; position:sticky; bottom:0; z-index:3; box-shadow:0 -6px 18px rgba(0,0,0,.04);
+      display:flex;
+      /* Apple HIG: 16pt spacing between elements */
+      gap: 12px;
+      padding: 12px;
+      /* Apple HIG: Safe area insets */
+      padding-left: max(16px, env(safe-area-inset-left));
+      padding-right: max(16px, env(safe-area-inset-right));
+      padding-bottom: max(12px, env(safe-area-inset-bottom));
+      border-top: 1px solid var(--line);
+      /* iOS-style backdrop */
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      position: sticky;
+      bottom: 0;
+      z-index: 3;
+      /* Enhanced shadow for depth */
+      box-shadow: 0 -8px 24px rgba(0,0,0,.08);
     }
     .composer .input{ 
-      height:48px; 
-      font-size:16px; /* iOS 확대 방지 */
-      touch-action:manipulation; /* 터치 최적화 */
+      /* Apple HIG: Better touch target and typography */
+      height: 52px;
+      font-size: 17px; /* iOS 권장 폰트 크기 */
+      line-height: 1.4;
+      padding: 12px 16px;
+      border-radius: 12px;
+      /* iOS-style input behavior */
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      /* Better focus state */
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
     }
 
     /* Login Overlay */
@@ -388,7 +407,7 @@
       margin: 4px 0;
     }
 
-    /* Work Status Selector Modal */
+    /* Work Status Selector Modal - Mobile Responsive */
     .work-status-modal {
       position: fixed;
       inset: 0;
@@ -398,6 +417,16 @@
       backdrop-filter: blur(4px);
       z-index: 10000;
       animation: fadeIn 0.2s ease-out;
+      padding: 16px;
+      box-sizing: border-box;
+    }
+
+    /* Mobile viewport adjustments */
+    @media (max-width: 768px) {
+      .work-status-modal {
+        place-items: end center;
+        padding: 0;
+      }
     }
 
     @keyframes fadeIn {
@@ -413,6 +442,28 @@
       border-radius: 16px;
       box-shadow: var(--shadow-2);
       animation: slideUp 0.2s ease-out;
+    }
+
+    /* Mobile drawer-style bottom sheet */
+    @media (max-width: 768px) {
+      .work-status-dialog {
+        width: 100%;
+        max-height: 85vh;
+        border-radius: 20px 20px 0 0;
+        animation: slideUpFromBottom 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+        touch-action: pan-y;
+      }
+
+      @keyframes slideUpFromBottom {
+        from {
+          transform: translateY(100%);
+          opacity: 0.8;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
     }
 
     @keyframes slideUp {
@@ -622,8 +673,42 @@
     }
     /* 기존 480px 이하 추가 스타일 */
     @media (max-width: 480px){
-      .composer .input{ height:44px; font-size:16px; } /* iOS 확대 방지 */
+      .composer .input{ 
+        height: 50px;
+        font-size: 16px; /* iOS 확대 방지 */
+        padding: 10px 14px;
+        border-radius: 10px;
+      }
       .tabs .tab{ max-width:70vw; }
+      
+      /* Apple HIG: 소형 모바일에서도 적절한 터치 타겟 */
+      .btn-icon {
+        width: 48px !important;
+        height: 48px !important;
+        font-size: 20px !important;
+        border-radius: 10px !important;
+      }
+      
+      .btn {
+        min-height: 48px !important;
+        height: 48px !important;
+        font-size: 16px !important;
+        border-radius: 10px !important;
+        padding: 0 18px !important;
+      }
+      
+      /* 더 작은 화면에서 여백 최적화 */
+      .composer {
+        margin-bottom: 16px;
+        padding: 10px 16px;
+        gap: 10px;
+      }
+      
+      .wrap {
+        /* Apple HIG: 작은 화면 대응 */
+        padding-bottom: calc(75px + max(8px, env(safe-area-inset-bottom)));
+      }
+      
       /* 소형 모바일에서 더 작은 접속자 아바타 적용 */
       .connected-users .user-avatar{ width:24px; height:24px; font-size:10px; }
       .connected-users{ gap:2px; }
@@ -698,13 +783,44 @@
     }
 
     /* ===== Profile Modal ===== */
-    .pmodal{ position:fixed; inset:0; display:none; place-items:center; z-index:60; }
+    .pmodal{ 
+      position:fixed; inset:0; display:none; place-items:center; z-index:60; 
+      padding: 16px; box-sizing: border-box;
+    }
     .pmodal.show{ display:grid; }
     .pback{ position:absolute; inset:0; background:rgba(0,0,0,.45); }
     .pcard{
       position:relative; width:min(420px, calc(100vw - 32px));
       background:#fff; border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow-2);
       padding:16px; display:grid; gap:12px; z-index:1;
+      max-height: calc(100vh - 32px);
+      overflow-y: auto;
+    }
+
+    /* Mobile drawer-style profile modal */
+    @media (max-width: 768px) {
+      .pmodal {
+        place-items: end center;
+        padding: 0;
+      }
+
+      .pcard {
+        width: 100%;
+        max-height: 90vh;
+        border-radius: 20px 20px 0 0;
+        animation: profileSlideUpFromBottom 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+      }
+
+      @keyframes profileSlideUpFromBottom {
+        from {
+          transform: translateY(100%);
+          opacity: 0.8;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
     }
     .pclose{ position:absolute; top:8px; right:8px; border:0; background:#fff; border:1px solid var(--line); border-radius:8px; padding:6px 8px; cursor:pointer; }
     .pavatar{ width:100%; display:grid; place-items:center; }
@@ -1094,10 +1210,38 @@
     }
 
     /* Mobile Responsive */
+    @media (max-width: 768px) {
+      .modal-overlay {
+        padding: 0;
+      }
+
+      .modal-container {
+        width: 100%;
+        max-height: 95vh;
+        border-radius: 20px 20px 0 0;
+        animation: modalSlideUpFromBottom 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        margin: 0;
+      }
+
+      @keyframes modalSlideUpFromBottom {
+        from {
+          transform: translateY(100%);
+          opacity: 0.8;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
+    }
+
     @media (max-width: 480px) {
       .modal-container {
-        width: calc(100vw - 16px);
-        max-height: calc(100vh - 32px);
+        max-height: 98vh;
       }
 
       .current-profile-image {
@@ -1173,6 +1317,200 @@
       border-right-color: #fff;
       border-bottom-color: #fff;
       border-radius: 0 !important;
+    }
+
+    /* Mobile Navigation Menu */
+    .mobile-nav {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--panel);
+      border-top: 1px solid var(--line);
+      z-index: 50;
+      /* Apple HIG: Safe area handling */
+      padding: 12px 0 max(12px, env(safe-area-inset-bottom));
+      /* iOS-style backdrop blur */
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      background: rgba(255, 255, 255, 0.85);
+    }
+
+    /* Hide mobile nav when modal is open */
+    body:has(.modal-overlay[style*="flex"]) .mobile-nav,
+    body:has(.work-status-modal[style*="grid"]) .mobile-nav,
+    body:has(.pmodal.show) .mobile-nav,
+    body:has(#connectedUsersModal[style*="grid"]) .mobile-nav {
+      display: none !important;
+    }
+
+    .mobile-nav-buttons {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      max-width: 100%;
+      margin: 0 auto;
+      /* Apple HIG: 60pt center-to-center spacing */
+      gap: 32px;
+      padding: 0 24px;
+    }
+
+    .mobile-nav-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: none;
+      border: none;
+      color: var(--text);
+      /* Apple HIG: Minimum 11pt font size for mobile */
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      border-radius: 12px;
+      transition: background-color 0.15s ease;
+      /* Apple HIG: 44x44pt minimum touch target */
+      width: 64px;
+      height: 56px;
+      padding: 6px;
+      /* iOS-style button appearance */
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+
+    .mobile-nav-btn:hover {
+      background: var(--hover);
+    }
+
+    .mobile-nav-btn .icon {
+      font-size: 24px;
+      margin-bottom: 2px;
+      /* Better icon alignment */
+      line-height: 1;
+      display: block;
+    }
+
+    @media (max-width: 768px) {
+      .mobile-nav {
+        display: block;
+      }
+
+      /* Adjust main content to account for mobile nav */
+      .wrap {
+        /* Apple HIG: Account for mobile nav height + safe area */
+        padding-bottom: calc(80px + max(12px, env(safe-area-inset-bottom)));
+      }
+
+      /* Mobile chat input improvements */
+      .composer {
+        /* Apple HIG: 16pt minimum spacing */
+        margin-bottom: 20px;
+        padding: 0 20px;
+        /* Improved safe area handling */
+        padding-left: max(20px, env(safe-area-inset-left));
+        padding-right: max(20px, env(safe-area-inset-right));
+      }
+
+      /* Apple HIG: Mobile button improvements */
+      .btn-icon {
+        width: 52px !important;
+        height: 52px !important;
+        min-width: 52px !important;
+        min-height: 52px !important;
+        font-size: 22px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        /* iOS-style touch feedback */
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+        border-radius: 12px !important;
+      }
+
+      .btn {
+        min-height: 52px !important;
+        height: 52px !important;
+        padding: 0 24px !important;
+        /* Apple HIG: Better touch targets */
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+        border-radius: 12px !important;
+        font-size: 16px !important;
+      }
+    }
+
+    /* Connected Users Modal Styles */
+    .connected-users-list {
+      padding: 16px 0;
+    }
+
+    .mobile-user-item {
+      display: flex;
+      align-items: center;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--line);
+      cursor: pointer;
+      transition: background-color 0.15s ease;
+    }
+
+    .mobile-user-item:hover {
+      background: var(--hover);
+    }
+
+    .mobile-user-item:last-child {
+      border-bottom: none;
+    }
+
+    .mobile-user-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 18px;
+      color: var(--text);
+      margin-right: 16px;
+      overflow: hidden;
+    }
+
+    .mobile-user-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .mobile-user-info {
+      flex: 1;
+    }
+
+    .mobile-user-name {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .mobile-user-status {
+      font-size: 14px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .mobile-work-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      background: var(--line);
     }
   </style>
   <script src="/socket.io/socket.io.js"></script>
@@ -1261,6 +1599,28 @@
       </form>
     </section>
   </div>
+
+  <!-- Mobile Navigation -->
+  <nav class="mobile-nav">
+    <div class="mobile-nav-buttons">
+      <button class="mobile-nav-btn" onclick="openProfileEditModal()" title="프로필 편집">
+        <span class="icon">✏️</span>
+        <span>프로필</span>
+      </button>
+      <button class="mobile-nav-btn" onclick="openWorkStatusSelector()" title="업무 상태 변경">
+        <span class="icon">🔄</span>
+        <span>상태</span>
+      </button>
+      <button class="mobile-nav-btn" onclick="openConnectedUsersModal()" title="접속자 목록">
+        <span class="icon">👥</span>
+        <span>접속자</span>
+      </button>
+      <button class="mobile-nav-btn" onclick="showProfileModal(AppState.me?.nickname, AppState.me?.avatar, AppState.me?.status)" title="내 프로필 보기">
+        <span class="icon">👤</span>
+        <span>정보</span>
+      </button>
+    </div>
+  </nav>
 
   <!-- LOGIN -->
   <div class="auth" id="auth" role="dialog" aria-modal="true" aria-labelledby="dlg-title">
@@ -2188,6 +2548,9 @@
         
         modal.style.display = 'grid';
         
+        // Prevent body scroll on mobile
+        document.body.style.overflow = 'hidden';
+        
         // 선택 상태 UI 업데이트
         updateWorkStatusSelection();
       }
@@ -2197,6 +2560,8 @@
       const modal = document.getElementById('workStatusModal');
       if (modal) {
         modal.style.display = 'none';
+        // Restore body scroll
+        document.body.style.overflow = '';
       }
     }
 
@@ -2325,6 +2690,70 @@
     }
 
 
+
+    // Connected Users Modal Functions
+    function openConnectedUsersModal() {
+      const modal = document.getElementById('connectedUsersModal');
+      if (modal) {
+        renderMobileConnectedUsers();
+        modal.style.display = 'grid';
+        document.body.style.overflow = 'hidden';
+      }
+    }
+
+    function closeConnectedUsersModal() {
+      const modal = document.getElementById('connectedUsersModal');
+      if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = '';
+      }
+    }
+
+    function renderMobileConnectedUsers() {
+      const container = document.getElementById('mobileConnectedUsersList');
+      if (!container) return;
+
+      const users = AppState.connectedUsers || [];
+      const headerText = document.querySelector('#connectedUsersModal h3');
+      if (headerText) {
+        headerText.textContent = `현재 접속자 (${users.length})`;
+      }
+
+      if (users.length === 0) {
+        container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--muted);">접속자가 없습니다.</div>';
+        return;
+      }
+
+      container.innerHTML = users.map(user => {
+        const safeInitial = initialLetter(user.nickname || user.username || '');
+        const workStatus = WorkStatus[user.workStatus || 'offline'] || WorkStatus.offline;
+        
+        const avatarHtml = user.avatar && user.avatar.trim() 
+          ? `<img src="${user.avatar}" alt="${user.nickname}님의 프로필" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">`
+          : '';
+        
+        const fallbackAvatarHtml = `<div style="display: ${user.avatar ? 'none' : 'flex'}; width: 100%; height: 100%; align-items: center; justify-content: center;">${safeInitial}</div>`;
+
+        return `
+          <div class="mobile-user-item" onclick="showProfileModal('${user.nickname || user.username}', '${user.avatar || ''}', '${user.status || ''}', '${user.userId}')">
+            <div class="mobile-user-avatar">
+              ${avatarHtml}
+              ${fallbackAvatarHtml}
+            </div>
+            <div class="mobile-user-info">
+              <div class="mobile-user-name">${user.nickname || user.username || 'Unknown'}</div>
+              <div class="mobile-user-status">
+                ${user.status || '상태메시지 없음'}
+                <div class="mobile-work-status">
+                  <span>${workStatus.icon}</span>
+                  <span>${workStatus.text}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
 
     // Settings function placeholder
     function openSettings() {
@@ -4165,12 +4594,17 @@
       // 해당 사용자의 업무 상태 표시 업데이트
       updateModalWorkStatus(userId);
       
+      // Prevent body scroll on mobile
+      document.body.style.overflow = 'hidden';
+      
       DOM.el('#pmodal').classList.add('show');
       DOM.el('#pmodal').setAttribute('aria-hidden','false');
     }
     function hideProfileModal(){
       DOM.el('#pmodal').classList.remove('show');
       DOM.el('#pmodal').setAttribute('aria-hidden','true');
+      // Restore body scroll
+      document.body.style.overflow = '';
     }
     function bindProfileModalBasics(){
       DOM.el('#pback').addEventListener('click', hideProfileModal);
@@ -5345,6 +5779,21 @@
   <!-- Uppy.js JavaScript -->
   <script src="https://releases.transloadit.com/uppy/v3.25.0/uppy.min.js"></script>
   
+  <!-- Connected Users Modal -->
+  <div class="work-status-modal" id="connectedUsersModal" style="display: none;">
+    <div class="work-status-dialog">
+      <div class="status-header">
+        <h3>현재 접속자</h3>
+        <button class="modal-close" onclick="closeConnectedUsersModal()">✕</button>
+      </div>
+      <div class="status-content" id="connectedUsersContent">
+        <div class="connected-users-list" id="mobileConnectedUsersList">
+          <!-- 접속자 목록이 여기에 렌더링됩니다 -->
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Work Status Selector Modal (Hidden by default) -->
   <div id="workStatusModal" class="work-status-modal" style="display:none;">
     <div class="work-status-dialog">
