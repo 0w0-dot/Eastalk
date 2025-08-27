@@ -57,6 +57,36 @@
       --shadow-1:0 1px 2px rgba(0,0,0,.06);
       --shadow-2:0 6px 24px rgba(0,0,0,.08);
       --focus: 0 0 0 3px rgba(0,0,0,.08), 0 0 0 6px rgba(255,212,0,.45);
+      
+      /* Material Design 3 기반 통합 타이포그래피 시스템 */
+      --font-size-headline-lg: 24px;
+      --font-size-headline: 20px;
+      --font-size-body: 16px;
+      --font-size-label: 14px;
+      --font-size-small: 12px;
+      
+      /* 통합 spacing 시스템 */
+      --spacing-xs: 4px;
+      --spacing-sm: 8px;
+      --spacing-md: 16px;
+      --spacing-lg: 24px;
+      --spacing-xl: 32px;
+      
+      /* 통합 터치 타겟 크기 */
+      --touch-target-min: 44px; /* iOS HIG 최소값 */
+      --touch-target-recommended: 48px; /* MD3 권장값 */
+      --touch-target-comfortable: 56px; /* 편안한 크기 */
+    }
+    
+    /* 데스크톱 조정 */
+    @media (min-width: 769px) {
+      :root {
+        --font-size-headline-lg: 28px;
+        --font-size-headline: 24px;
+        --spacing-md: 20px;
+        --spacing-lg: 28px;
+        --spacing-xl: 40px;
+      }
     }
     *{ box-sizing:border-box; }
     html,body{ height:100%; }
@@ -64,6 +94,73 @@
       margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Noto Sans KR,sans-serif;
       background:var(--bg); color:var(--text);
       -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+      font-size: var(--font-size-body);
+    }
+    
+    /* ===== 통합 버튼 디자인 시스템 ===== */
+    button { 
+      cursor: pointer; 
+      touch-action: manipulation;
+      font: inherit;
+    }
+    
+    .btn, .mobile-nav-btn, .btn-save, .btn-primary {
+      /* Material Design 3 버튼 스타일 */
+      font-size: var(--font-size-label);
+      font-weight: 500;
+      border-radius: var(--radius-md);
+      padding: var(--spacing-sm) var(--spacing-md);
+      min-height: var(--touch-target-recommended);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--spacing-sm);
+      border: none;
+      background: var(--accent);
+      color: var(--accent-ink);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    /* 호버 효과 */
+    .btn:hover:not(:disabled), 
+    .mobile-nav-btn:hover:not(:disabled),
+    .btn-save:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-2);
+    }
+    
+    /* 클릭 효과 */
+    .btn:active:not(:disabled),
+    .mobile-nav-btn:active:not(:disabled) {
+      transform: translateY(0);
+      transition-duration: 0.1s;
+    }
+    
+    /* 비활성화 상태 */
+    button:disabled, 
+    .btn:disabled,
+    .btn[disabled],
+    .btn-save[disabled] {
+      opacity: 0.5;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+    
+    /* 로딩 스피너 */
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(0,0,0,0.1);
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
 
     /* ===== App Shell ===== */
@@ -74,9 +171,9 @@
       padding-right:max(16px, env(safe-area-inset-right));
       padding-top:max(12px, env(safe-area-inset-top));
       border-bottom:1px solid var(--line);
-      background:#fafafa; position:sticky; top:0; z-index:5;
+      background:#fafafa; position:sticky; top:0; z-index:100;
     }
-    header .brand{ font-weight:700; letter-spacing:.2px; }
+    header .brand{ font-weight:700; letter-spacing:.2px; font-size: var(--font-size-headline); }
     header .brand span{ color:var(--accent); }
     #topStatus{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:40vw; }
 
@@ -909,15 +1006,20 @@
 
     /* ===== Profile Modal ===== */
     .pmodal{ 
-      position:fixed; inset:0; display:none; place-items:center; z-index:60; 
+      position:fixed; inset:0; display:none; place-items:center; 
+      z-index:1000; /* Material Design 3: 모달 레이어 z-index */
       padding: 16px; box-sizing: border-box;
     }
     .pmodal.show{ display:grid; }
-    .pback{ position:absolute; inset:0; background:rgba(0,0,0,.45); }
+    .pback{ 
+      position:absolute; inset:0; background:rgba(0,0,0,.32); /* MD3 scrim opacity */
+      z-index:1000;
+    }
     .pcard{
       position:relative; width:min(420px, calc(100vw - 32px));
       background:#fff; border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow-2);
-      padding:16px; display:grid; gap:12px; z-index:1;
+      padding:16px; display:grid; gap:12px; 
+      z-index:1001; /* 모달 콘텐츠는 배경보다 위에 */
       max-height: calc(100vh - 32px);
       overflow-y: auto;
     }
@@ -1453,7 +1555,7 @@
       right: 0;
       background: var(--panel);
       border-top: 1px solid var(--line);
-      z-index: 50;
+      z-index: 900; /* Material Design 3: 네비게이션 레이어 */
       /* 파란색 선끼리 여백 동일하게 - 헤더 패딩과 맞춰서 6px 적용 */
       padding: 6px 0 max(6px, env(safe-area-inset-bottom));
       /* iOS-style backdrop blur */
@@ -1489,14 +1591,15 @@
       background: none;
       border: none;
       color: var(--text);
-      /* Apple HIG: Minimum 11pt font size for mobile */
-      font-size: 10px;
+      /* 통합 타이포그래피 적용 */
+      font-size: var(--font-size-small);
       font-weight: 500;
       letter-spacing: 0.01em;
       cursor: pointer;
-      border-radius: 8px;
-      transition: background-color 0.15s ease;
-      /* Apple HIG: 44x44pt minimum touch target but smaller for better fit */
+      border-radius: var(--radius-sm);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      min-height: var(--touch-target-recommended);
+      /* Material Design 3 터치 타겟 적용 */
       width: 52px;
       height: 48px;
       padding: 4px;
@@ -2539,6 +2642,15 @@
         this.currentImage = AppState.me?.avatar || null;
       }
 
+      // 저장 버튼 초기화 메서드
+      resetSaveButton() {
+        const saveBtn = document.querySelector('.btn-save');
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          saveBtn.innerHTML = '저장';
+        }
+      }
+
       async saveProfile() {
         if (this.isUploading) return;
 
@@ -2615,21 +2727,24 @@
           }
           
           // 성공적으로 저장되면 모달 닫기
-          this.close();
-          
           console.log('✅ 프로필 저장 완료');
+          
+          // 버튼 상태 먼저 초기화
+          this.resetSaveButton();
+          
+          // 약간의 지연 후 모달 닫기 (사용자가 성공 상태를 볼 수 있도록)
+          setTimeout(() => {
+            this.close();
+          }, 200);
 
         } catch (error) {
           console.error('❌ 프로필 저장 실패:', error);
           alert('프로필 저장에 실패했습니다. 다시 시도해주세요.');
+          
+          // 에러 발생 시에도 버튼 초기화
+          this.resetSaveButton();
         } finally {
           this.isUploading = false;
-          
-          const saveBtn = document.querySelector('.btn-save');
-          if (saveBtn) {
-            saveBtn.disabled = false;
-            saveBtn.innerHTML = '저장';
-          }
         }
       }
 
