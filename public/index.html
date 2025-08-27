@@ -218,6 +218,56 @@
     .btn[disabled]{ opacity:.6; cursor:not-allowed; }
     .btn-primary{ background:var(--accent); color:var(--accent-ink); box-shadow:var(--shadow-1); }
     .btn-ghost{ background:#fff; color:var(--text); border:1px solid var(--line); }
+    
+    /* 메시지 입력창의 사진 버튼 개선 - Material Design 3 스타일 적용 */
+    .composer .btn-icon {
+      background: #f3f4f6 !important;
+      border: none !important;
+      border-radius: 10px !important;
+      color: var(--text) !important;
+      box-shadow: var(--shadow-1) !important;
+      transition: all 0.2s ease !important;
+      font-size: 18px !important;
+    }
+    
+    .composer .btn-icon:hover:not(:disabled) {
+      background: #e5e7eb !important;
+      box-shadow: var(--shadow-2) !important;
+      transform: translateY(-1px) !important;
+    }
+    
+    .composer .btn-icon:active:not(:disabled) {
+      transform: translateY(0) !important;
+      box-shadow: var(--shadow-1) !important;
+      background: #d1d5db !important;
+    }
+    
+    /* 보내기 버튼 텍스트 정렬 개선 */
+    .composer .btn-primary {
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      min-width: 60px !important;
+      height: 44px !important;
+    }
+    
+    .composer .btn-primary .label-txt {
+      display: inline-block !important;
+      white-space: nowrap !important;
+      line-height: 1 !important;
+    }
+    
+    /* 모바일에서도 전송 텍스트 사용 */
+    @media (max-width: 768px) {
+      .composer .btn-primary {
+        min-width: 50px !important;
+        padding: 0 8px !important;
+        font-size: 14px !important;
+      }
+    }
     .btn-icon{ width:44px; padding:0; }
 
     .spinner{ width:16px; height:16px; border-radius:50%; border:2px solid currentColor; border-top-color:transparent; animation:spin .8s linear infinite; }
@@ -1007,19 +1057,19 @@
     /* ===== Profile Modal ===== */
     .pmodal{ 
       position:fixed; inset:0; display:none; place-items:center; 
-      z-index:1000; /* Material Design 3: 모달 레이어 z-index */
+      z-index:10001; /* 접속자 모달(10000)보다 위에 표시 */
       padding: 16px; box-sizing: border-box;
     }
     .pmodal.show{ display:grid; }
     .pback{ 
       position:absolute; inset:0; background:rgba(0,0,0,.32); /* MD3 scrim opacity */
-      z-index:1000;
+      z-index:10000; /* 접속자 모달과 같은 레벨로 설정 */
     }
     .pcard{
       position:relative; width:min(420px, calc(100vw - 32px));
       background:#fff; border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow-2);
       padding:16px; display:grid; gap:12px; 
-      z-index:1001; /* 모달 콘텐츠는 배경보다 위에 */
+      z-index:10001; /* 프로필 카드가 접속자 모달(10000)보다 위에 나타나도록 */
       max-height: calc(100vh - 32px);
       overflow-y: auto;
     }
@@ -1848,7 +1898,7 @@
         <input id="text" class="input" placeholder="메시지 입력 (Enter 전송, Shift+Enter 줄바꿈)" disabled />
         <button id="photoBtn" class="btn btn-ghost btn-icon" title="사진">📷</button>
         <button id="sendBtn" class="btn btn-primary">
-          <span class="label-txt">보내기</span>
+          <span class="label-txt">전송</span>
           <span class="spinner" style="display:none"></span>
         </button>
       </div>
@@ -2189,7 +2239,14 @@
       }
 
       initUppyAdvanced() {
-        this.uppy = new Uppy({
+        // Uppy 생성자 안전성 검사
+        if (typeof Uppy !== 'function' && typeof Uppy.Core !== 'function') {
+          throw new Error('Uppy 생성자를 찾을 수 없습니다');
+        }
+        
+        // Uppy 인스턴스 생성 (Core 또는 기본 생성자 사용)
+        const UppyConstructor = typeof Uppy === 'function' ? Uppy : Uppy.Core;
+        this.uppy = new UppyConstructor({
           restrictions: {
             maxFileSize: 5 * 1024 * 1024, // 5MB
             maxNumberOfFiles: 1,
@@ -2205,39 +2262,51 @@
           }
         });
 
-        this.uppy.use(Uppy.Dashboard, {
-          target: '#uppyDashboard',
-          inline: true,
-          width: '100%',
-          height: 200,
-          showProgressDetails: true,
-          hideUploadButton: false,
-          hideRetryButton: true,
-          hidePauseResumeButton: true,
-          hideCancelButton: false,
-          showRemoveButtonAfterComplete: true,
-          note: 'JPG, PNG, GIF 파일만 업로드 가능 (최대 5MB)'
-        });
+        // Dashboard 플러그인 안전 사용
+        const DashboardPlugin = Uppy.Dashboard || (window.Uppy && window.Uppy.Dashboard);
+        if (DashboardPlugin) {
+          this.uppy.use(DashboardPlugin, {
+            target: '#uppyDashboard',
+            inline: true,
+            width: '100%',
+            height: 200,
+            showProgressDetails: true,
+            hideUploadButton: false,
+            hideRetryButton: true,
+            hidePauseResumeButton: true,
+            hideCancelButton: false,
+            showRemoveButtonAfterComplete: true,
+            note: 'JPG, PNG, GIF 파일만 업로드 가능 (최대 5MB)'
+          });
+        }
 
-        this.uppy.use(Uppy.ImageEditor, {
-          target: Uppy.Dashboard,
-          quality: 0.8
-        });
+        // ImageEditor 플러그인 안전 사용 (선택적)
+        const ImageEditorPlugin = Uppy.ImageEditor || (window.Uppy && window.Uppy.ImageEditor);
+        if (ImageEditorPlugin && DashboardPlugin) {
+          this.uppy.use(ImageEditorPlugin, {
+            target: DashboardPlugin,
+            quality: 0.8
+          });
+        }
 
-        this.uppy.use(Uppy.XHRUpload, {
-          endpoint: '/api/profile-upload',
-          method: 'POST',
-          formData: true,
-          fieldName: 'image',
-          getResponseData: (responseText) => {
-            const response = JSON.parse(responseText);
-            return {
-              url: response.url,
-              success: response.success
-            };
-          },
-          addMetadata: true
-        });
+        // XHRUpload 플러그인 안전 사용
+        const XHRUploadPlugin = Uppy.XHRUpload || (window.Uppy && window.Uppy.XHRUpload);
+        if (XHRUploadPlugin) {
+          this.uppy.use(XHRUploadPlugin, {
+            endpoint: '/api/profile-upload',
+            method: 'POST',
+            formData: true,
+            fieldName: 'image',
+            getResponseData: (responseText) => {
+              const response = JSON.parse(responseText);
+              return {
+                url: response.url,
+                success: response.success
+              };
+            },
+            addMetadata: true
+          });
+        }
 
         // 이벤트 핸들러
         this.uppy.on('upload', () => {
@@ -6397,6 +6466,17 @@
           }
           return;
         }
+      }
+    }
+
+    // Function to update dropdown info (if dropdown exists)
+    function updateDropdownInfo() {
+      // Check if dropdownStatus element exists, if not, skip silently
+      const dropdownStatus = document.getElementById('dropdownStatus');
+      if (dropdownStatus && AppState.userId) {
+        const currentWorkStatus = window.currentWorkStatus || 'offline';
+        const status = workStatuses[currentWorkStatus] || workStatuses.offline;
+        dropdownStatus.textContent = status.text;
       }
     }
 
