@@ -2403,8 +2403,8 @@
         this.modal.style.display = 'flex';
         document.body.style.overflow = 'hidden';
         
-        // 첫 번째 입력 필드에 포커스
-        setTimeout(() => {
+        // 첫 번째 입력 필드에 포커스 - 메모리 안전 버전
+        MemoryManager.setTimeoutSafe(() => {
           this.editNickname.focus();
         }, 100);
       }
@@ -3297,7 +3297,7 @@
           if (!state.isTabVisible) {
             let isShowingCount = true;
             
-            state.titleInterval = setInterval(() => {
+            state.titleInterval = MemoryManager.setIntervalSafe(() => {
               // 탭이 활성화되면 깜빡임 중지하고 원래 제목으로 복원
               if (AppState.notifications.state.isTabVisible) {
                 clearInterval(state.titleInterval);
@@ -3839,8 +3839,8 @@
       },
       
       start() {
-        // 3분마다 heartbeat (Socket.IO 기본 ping보다 느리게)
-        this.intervalId = setInterval(() => {
+        // 3분마다 heartbeat (Socket.IO 기본 ping보다 느리게) - 메모리 안전 버전
+        this.intervalId = MemoryManager.setIntervalSafe(() => {
           if (TabActivityMonitor.shouldSendHeartbeat() && socket.connected) {
             this.sendHeartbeat();
           }
@@ -5866,8 +5866,416 @@
     // Initialize work status on page load
     document.addEventListener('DOMContentLoaded', function() {
       initializeWorkStatus();
+      setupEventDelegation(); // 🎧 이벤트 위임 시스템 초기화
       console.log('🔧 Modern Profile System initialized');
     });
+
+    // 🎧 이벤트 위임 시스템 (메모리 최적화)
+    function setupEventDelegation() {
+      console.log('🎧 이벤트 위임 시스템 초기화 중...');
+      
+      // DOM 캐싱 시스템 초기화
+      setupDOMCache();
+      
+      // 성능 모니터링 시작
+      PerformanceMonitor.startMemoryMonitoring();
+      
+      // 중앙 집중식 클릭 이벤트 처리
+      document.addEventListener('click', handleGlobalClick, { passive: false });
+      
+      // 중앙 집중식 입력 이벤트 처리 (메모리 효율적)
+      document.addEventListener('input', handleGlobalInput, { passive: true });
+      
+      // 중앙 집중식 키보드 이벤트 처리
+      document.addEventListener('keydown', handleGlobalKeydown, { passive: false });
+      
+      console.log('✅ 이벤트 위임 시스템 초기화 완료 (메모리 최적화)');
+    }
+
+    // 🏃‍♂️ DOM 요소 캐싱 시스템 (성능 최적화)
+    const DOMCache = {
+      elements: new Map(),
+      selectors: new Map(),
+      
+      // 자주 사용되는 요소들 미리 캐싱 (성능 모니터링 추가)
+      get(selector) {
+        PerformanceMonitor.trackDOMQuery(); // DOM 쿼리 추적
+        
+        if (this.elements.has(selector)) {
+          const cached = this.elements.get(selector);
+          // 요소가 여전히 DOM에 있는지 확인
+          if (document.contains(cached)) {
+            return cached;
+          }
+          // 캐시에서 제거
+          this.elements.delete(selector);
+        }
+        
+        // 새로 찾아서 캐싱
+        const element = document.querySelector(selector);
+        if (element) {
+          this.elements.set(selector, element);
+        }
+        return element;
+      },
+      
+      // 캐시 정리 (메모리 누수 방지)
+      cleanup() {
+        console.log('🧹 DOM 캐시 정리 중...');
+        for (const [selector, element] of this.elements.entries()) {
+          if (!document.contains(element)) {
+            this.elements.delete(selector);
+          }
+        }
+        console.log(`🧹 DOM 캐시 정리 완료 (남은 캐시: ${this.elements.size}개)`);
+      }
+    };
+
+    function setupDOMCache() {
+      // 자주 사용되는 요소들 미리 캐싱
+      const commonSelectors = [
+        '#profileModal', '#profileEditModal', 
+        '.nickname-count', '.status-count',
+        '#toggle98', '#avatarPreview'
+      ];
+      
+      commonSelectors.forEach(selector => DOMCache.get(selector));
+      
+      // 주기적 캐시 정리 (10초마다)
+      const cleanupInterval = setInterval(() => DOMCache.cleanup(), 10000);
+      
+      // 페이지 언로드 시 정리
+      window.addEventListener('beforeunload', () => {
+        clearInterval(cleanupInterval);
+        DOMCache.elements.clear();
+        DOMCache.selectors.clear();
+      }, { once: true });
+      
+      console.log('🏃‍♂️ DOM 캐시 시스템 초기화 완료');
+    }
+
+    // 🚀 함수 디바운싱/스로틀링 유틸리티 (성능 최적화)
+    const PerformanceUtils = {
+      // 디바운스된 함수들을 저장
+      debouncedFunctions: new Map(),
+      throttledFunctions: new Map(),
+      
+      // 디바운스 함수 생성 및 캐싱
+      debounce(fn, delay, key) {
+        if (this.debouncedFunctions.has(key)) {
+          return this.debouncedFunctions.get(key);
+        }
+        
+        let timeoutId;
+        const debouncedFn = (...args) => {
+          clearTimeout(timeoutId);
+          timeoutId = setTimeout(() => fn(...args), delay);
+        };
+        
+        this.debouncedFunctions.set(key, debouncedFn);
+        return debouncedFn;
+      },
+      
+      // 스로틀 함수 생성 및 캐싱
+      throttle(fn, delay, key) {
+        if (this.throttledFunctions.has(key)) {
+          return this.throttledFunctions.get(key);
+        }
+        
+        let isThrottled = false;
+        const throttledFn = (...args) => {
+          if (!isThrottled) {
+            fn(...args);
+            isThrottled = true;
+            setTimeout(() => { isThrottled = false; }, delay);
+          }
+        };
+        
+        this.throttledFunctions.set(key, throttledFn);
+        return throttledFn;
+      },
+      
+      // RAF 기반 최적화된 DOM 업데이트
+      scheduleUpdate(callback) {
+        if (this.updateScheduled) return;
+        this.updateScheduled = true;
+        
+        requestAnimationFrame(() => {
+          callback();
+          this.updateScheduled = false;
+        });
+      }
+    };
+
+    // 🧹 메모리 누수 방지 시스템
+    const MemoryManager = {
+      // 등록된 리스너들 추적
+      eventListeners: new Set(),
+      intervals: new Set(),
+      timeouts: new Set(),
+      
+      // 안전한 이벤트 리스너 등록
+      addEventListenerSafe(element, event, handler, options) {
+        element.addEventListener(event, handler, options);
+        const cleanup = () => element.removeEventListener(event, handler, options);
+        this.eventListeners.add(cleanup);
+        return cleanup;
+      },
+      
+      // 안전한 인터벌 등록
+      setIntervalSafe(callback, delay) {
+        const id = setInterval(callback, delay);
+        this.intervals.add(id);
+        return id;
+      },
+      
+      // 안전한 타임아웃 등록
+      setTimeoutSafe(callback, delay) {
+        const id = setTimeout(() => {
+          this.timeouts.delete(id);
+          callback();
+        }, delay);
+        this.timeouts.add(id);
+        return id;
+      },
+      
+      // 전체 정리
+      cleanup() {
+        console.log('🧹 메모리 정리 시작...');
+        
+        // 이벤트 리스너 정리
+        this.eventListeners.forEach(cleanup => cleanup());
+        this.eventListeners.clear();
+        
+        // 인터벌 정리
+        this.intervals.forEach(id => clearInterval(id));
+        this.intervals.clear();
+        
+        // 타임아웃 정리
+        this.timeouts.forEach(id => clearTimeout(id));
+        this.timeouts.clear();
+        
+        console.log('✅ 메모리 정리 완료');
+      }
+    };
+
+    // 📊 성능 모니터링 시스템 (실시간 성능 추적)
+    const PerformanceMonitor = {
+      metrics: {
+        domQueries: 0,
+        eventsFired: 0,
+        memoryUsage: 0,
+        lastGC: Date.now()
+      },
+      
+      // DOM 쿼리 카운터
+      trackDOMQuery() {
+        this.metrics.domQueries++;
+        
+        // 100회마다 성능 리포트 출력
+        if (this.metrics.domQueries % 100 === 0) {
+          console.log(`📊 성능 통계 - DOM 쿼리: ${this.metrics.domQueries}회, 이벤트: ${this.metrics.eventsFired}회`);
+        }
+      },
+      
+      // 이벤트 카운터
+      trackEvent() {
+        this.metrics.eventsFired++;
+      },
+      
+      // 메모리 사용량 모니터링 (5초마다)
+      startMemoryMonitoring() {
+        MemoryManager.setIntervalSafe(() => {
+          if (performance.memory) {
+            const memory = performance.memory;
+            this.metrics.memoryUsage = memory.usedJSHeapSize;
+            
+            // 메모리 사용량이 50MB를 초과하면 경고
+            if (memory.usedJSHeapSize > 50 * 1024 * 1024) {
+              console.warn(`⚠️ 메모리 사용량 높음: ${(memory.usedJSHeapSize / 1024 / 1024).toFixed(1)}MB`);
+              
+              // 가비지 컬렉션 강제 실행
+              if (global.gc) {
+                global.gc();
+                this.metrics.lastGC = Date.now();
+              }
+            }
+          }
+        }, 5000);
+      },
+      
+      // 성능 최적화 제안
+      getOptimizationSuggestions() {
+        const suggestions = [];
+        
+        if (this.metrics.domQueries > 1000) {
+          suggestions.push('DOM 쿼리가 많습니다. 요소 캐싱을 더 활용하세요.');
+        }
+        
+        if (this.metrics.memoryUsage > 100 * 1024 * 1024) {
+          suggestions.push('메모리 사용량이 높습니다. 사용하지 않는 객체를 정리하세요.');
+        }
+        
+        return suggestions;
+      }
+    };
+
+    // 페이지 언로드 시 메모리 정리
+    window.addEventListener('beforeunload', () => {
+      MemoryManager.cleanup();
+      PerformanceUtils.debouncedFunctions.clear();
+      PerformanceUtils.throttledFunctions.clear();
+      
+      // 최종 성능 리포트
+      console.log('📊 최종 성능 리포트:', {
+        domQueries: PerformanceMonitor.metrics.domQueries,
+        events: PerformanceMonitor.metrics.eventsFired,
+        memoryPeak: (PerformanceMonitor.metrics.memoryUsage / 1024 / 1024).toFixed(1) + 'MB',
+        suggestions: PerformanceMonitor.getOptimizationSuggestions()
+      });
+    }, { once: true });
+
+    // 🎯 전역 클릭 이벤트 핸들러 (이벤트 위임 + 성능 모니터링)
+    function handleGlobalClick(e) {
+      PerformanceMonitor.trackEvent(); // 이벤트 추적
+      
+      const target = e.target;
+      const closest = target.closest.bind(target);
+      
+      // 🔄 Win98 토글 처리
+      if (target.id === 'toggle98' || closest('#toggle98')) {
+        applyTheme98(!document.body.classList.contains('win98')); 
+        beep();
+        return;
+      }
+      
+      // 📝 프로필 편집 관련 버튼들
+      if (closest('.btn-save')) {
+        const profileModal = closest('#profileEditModal');
+        if (profileModal && window.profileEditManager) {
+          window.profileEditManager.saveProfile();
+        }
+        return;
+      }
+      
+      // 🖼️ 이미지 변경 버튼
+      if (closest('.change-image-btn')) {
+        if (window.profileEditManager) {
+          window.profileEditManager.toggleImageUpload();
+        }
+        return;
+      }
+      
+      // 💬 답글 버튼들
+      if (closest('.reply-btn')) {
+        e.stopPropagation();
+        const messageElement = closest('.message');
+        if (messageElement) {
+          const messageId = messageElement.dataset.messageId;
+          const senderName = messageElement.dataset.senderName;
+          if (messageId && senderName) {
+            setReplyTarget(messageId, senderName);
+          }
+        }
+        return;
+      }
+      
+      // 👤 아바타 클릭 (프로필 보기)
+      if (closest('.avatar') && !closest('.profile-modal')) {
+        const avatar = closest('.avatar');
+        const messageElement = avatar.closest('.message');
+        if (messageElement) {
+          const senderName = messageElement.dataset.senderName;
+          if (senderName && senderName !== AppState.me?.nickname) {
+            showProfileModal(senderName);
+          }
+        }
+        return;
+      }
+      
+      // 🔙 프로필 모달 뒤로가기/닫기
+      if (target.id === 'pback' || target.id === 'pclose') {
+        hideProfileModal();
+        return;
+      }
+      
+      // 🎯 버튼 그룹들
+      if (closest('.btn-group button')) {
+        const btn = closest('.btn-group button');
+        if (btn.classList.contains('active')) return;
+        
+        // 형제 버튼들의 active 클래스 제거
+        btn.parentNode.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        return;
+      }
+    }
+
+    // ⌨️ 전역 입력 이벤트 핸들러 (이벤트 위임 + DOM 캐시)
+    function handleGlobalInput(e) {
+      const target = e.target;
+      
+      // 📝 닉네임 입력 필드 (글자 수 카운터) - 캐시된 요소 사용
+      if (target.classList.contains('edit-nickname') || target.id === 'editNickname') {
+        const counter = DOMCache.get('.nickname-count');
+        if (counter) {
+          counter.textContent = target.value.length;
+        }
+        return;
+      }
+      
+      // 💭 상태 메시지 입력 필드 (글자 수 카운터) - 캐시된 요소 사용
+      if (target.classList.contains('edit-status') || target.id === 'editStatusMessage') {
+        const counter = DOMCache.get('.status-count');
+        if (counter) {
+          counter.textContent = target.value.length;
+        }
+        return;
+      }
+      
+      // 🖼️ 아바타 URL 입력 필드 - 캐시된 요소 사용
+      if (target.id === 'avatarInput') {
+        const preview = DOMCache.get('#avatarPreview');
+        if (preview) {
+          preview.src = target.value || '/favicon.ico';
+        }
+        return;
+      }
+    }
+
+    // ⌨️ 전역 키보드 이벤트 핸들러 (이벤트 위임 + DOM 캐시)
+    function handleGlobalKeydown(e) {
+      // ESC 키로 모달 닫기
+      if (e.key === 'Escape') {
+        // 프로필 모달 닫기 - 캐시된 요소 사용
+        const profileModal = DOMCache.get('#profileModal');
+        if (profileModal?.style.display !== 'none') {
+          hideProfileModal();
+          return;
+        }
+        
+        // 프로필 편집 모달 닫기
+        if (window.profileEditManager && window.profileEditManager.isOpen()) {
+          window.profileEditManager.close();
+          return;
+        }
+      }
+      
+      // 엔터 키 처리 (텍스트 에디터 제외)
+      if (e.key === 'Enter' && !e.target.classList.contains('content-editable')) {
+        const target = e.target;
+        
+        // 프로필 편집 모달에서 엔터 키 - 캐시된 요소 사용
+        const profileEditModal = DOMCache.get('#profileEditModal');
+        if (profileEditModal && target.closest('#profileEditModal')) {
+          e.preventDefault();
+          if (window.profileEditManager) {
+            window.profileEditManager.saveProfile();
+          }
+          return;
+        }
+      }
+    }
 
     // Initialize work status when user logs in
     const originalUpdateProfile = window.updateProfileUI || updateProfileUI;
