@@ -184,10 +184,10 @@ if (USE_MEMORY_DB) {
 } else {
   mongoose.connect(MONGODB_URI, {
     maxPoolSize: 2,        // 10 → 2로 대폭 감소 (메모리 절약)
-    bufferMaxEntries: 0,   // 버퍼링 비활성화
     serverSelectionTimeoutMS: 5000,
     socketTimeoutMS: 45000,
-    maxIdleTimeMS: 30000   // 유휴 연결 빠른 해제
+    maxIdleTimeMS: 30000,  // 유휴 연결 빠른 해제
+    family: 4              // IPv4 강제 사용 (연결 속도 개선)
   })
   .then(async () => {
     console.log('✅ MongoDB 연결 성공');
