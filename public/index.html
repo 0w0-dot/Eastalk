@@ -2010,14 +2010,14 @@
           } else if (this.selectedFile) {
             console.log('📤 기본 파일 업로드 중...', this.selectedFile.name);
             
-            // 기본 파일 업로드 시스템 사용
+            // 기본 파일 업로드 시스템 사용 (Multer 및 Base64 fallback 포함)
             const uploadResult = await this.uploadSelectedFile(this.selectedFile);
             
             if (uploadResult && uploadResult.success) {
               profileData.avatar = uploadResult.url;
-              console.log('✅ 기본 파일 업로드 완료:', profileData.avatar);
+              console.log('✅ 파일 업로드 완료:', profileData.avatar);
               
-              // 이미지가 업로드된 경우 AppState와 UI를 바로 업데이트
+              // 이미지가 업로드된 경우 AppState와 UI를 바로 업데이트 (Multer와 Base64 둘 다 처리)
               AppState.me = { ...AppState.me, avatar: uploadResult.url };
             } else {
               throw new Error('이미지 업로드에 실패했습니다.');
