@@ -1557,13 +1557,13 @@ io.on('connection', (socket) => {
       
       const userId = userData.userId;
       
-      // 데이터베이스 업데이트 (status 필드에 업무 상태 저장)
+      // 데이터베이스 업데이트 (workStatus 필드에 업무 상태 저장, status는 프로필 상태메시지용)
       let user;
       if (USE_MEMORY_DB) {
         user = await MemoryDB.findUser({ id: userId });
         if (user) {
           user = await MemoryDB.updateUser(userId, { 
-            status: status,
+            workStatus: status,
             lastSeen: nowIso()
           });
         }
@@ -1571,7 +1571,7 @@ io.on('connection', (socket) => {
         user = await User.findOneAndUpdate(
           { id: userId },
           { 
-            status: status,
+            workStatus: status,
             lastSeen: nowIso()
           },
           { new: true }
@@ -1579,9 +1579,9 @@ io.on('connection', (socket) => {
       }
       
       if (user) {
-        // 접속자 정보도 업데이트
+        // 접속자 정보도 업데이트 (workStatus 필드로 업무 상태 저장)
         ConnectedUsersManager.updateUser(socket.id, {
-          status: status
+          workStatus: status
         });
         
         // 다른 모든 클라이언트에게 업무 상태 변경 알림
