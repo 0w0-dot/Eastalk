@@ -314,6 +314,7 @@ const ConnectedUsersManager = {
       nickname: userInfo.nickname || 'User',
       avatar: userInfo.avatar || '',
       status: userInfo.status || '',
+      workStatus: userInfo.workStatus || 'offline',  // 업무 상태 추가
       connectedAt: nowIso()
     };
     connectedUsers.set(socketId, userData);
@@ -361,6 +362,7 @@ const ConnectedUsersManager = {
       nickname: user.nickname,
       avatar: user.avatar,
       status: user.status,
+      workStatus: user.workStatus || 'offline',  // 업무 상태 추가
       connectedAt: user.connectedAt
     }));
   },
@@ -1423,7 +1425,8 @@ io.on('connection', (socket) => {
           userId: user.id,
           nickname: user.nickname || 'User',
           avatar: user.avatar || '',
-          status: user.status || ''
+          status: user.status || '',
+          workStatus: user.workStatus || 'offline'  // 업무 상태 추가
         });
         
         // 전체에게 새 접속자 알림
@@ -1431,7 +1434,8 @@ io.on('connection', (socket) => {
           userId: userData.userId,
           nickname: userData.nickname,
           avatar: userData.avatar,
-          status: userData.status
+          status: userData.status,
+          workStatus: userData.workStatus  // 업무 상태 추가
         });
         
         // 현재 접속자 목록 전송
