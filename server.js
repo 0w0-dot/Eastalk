@@ -1542,6 +1542,66 @@ io.on('connection', (socket) => {
     }
   });
   
+  // 업무 상태 변경 처리
+  socket.on('updateWorkStatus', async (data) => {
+    try {
+      const { status, timestamp } = data;
+      console.log(`🔄 업무 상태 변경 요청: ${status}`);
+      
+      // 접속자 정보에서 현재 사용자 찾기
+      const userData = connectedUsers.get(socket.id);
+      if (!userData) {
+        console.warn('❌ 접속자 정보를 찾을 수 없습니다:', socket.id);
+        return;
+      }
+      
+      const userId = userData.userId;
+      
+      // 데이터베이스 업데이트 (status 필드에 업무 상태 저장)
+      let user;
+      if (USE_MEMORY_DB) {
+        user = await MemoryDB.findUser({ id: userId });
+        if (user) {
+          user = await MemoryDB.updateUser(userId, { 
+            status: status,
+            lastSeen: nowIso()
+          });
+        }
+      } else {
+        user = await User.findOneAndUpdate(
+          { id: userId },
+          { 
+            status: status,
+            lastSeen: nowIso()
+          },
+          { new: true }
+        );
+      }
+      
+      if (user) {
+        // 접속자 정보도 업데이트
+        ConnectedUsersManager.updateUser(socket.id, {
+          status: status
+        });
+        
+        // 다른 모든 클라이언트에게 업무 상태 변경 알림
+        socket.broadcast.emit('userWorkStatusUpdated', {
+          userId: userId,
+          status: status,
+          nickname: user.nickname,
+          timestamp: timestamp
+        });
+        
+        console.log(`✅ 업무 상태 변경 완료: ${user.nickname} → ${status}`);
+      } else {
+        console.warn('❌ 사용자를 찾을 수 없습니다:', userId);
+      }
+      
+    } catch (error) {
+      console.error('❌ 업무 상태 변경 처리 오류:', error);
+    }
+  });
+  
   // 사용자 프로필 업데이트 처리
   socket.on('userProfileUpdated', (data) => {
     try {
