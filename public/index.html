@@ -4012,6 +4012,10 @@
       
       // 사용자 추가
       addUser: (user) => {
+        // workStatus 기본값 설정
+        if (!user.workStatus) {
+          user.workStatus = 'offline';
+        }
         const existingIndex = AppState.connectedUsers.findIndex(u => u.userId === user.userId);
         if (existingIndex >= 0) {
           // 기존 사용자 업데이트
@@ -4041,6 +4045,12 @@
       // 전체 목록 설정
       setUsers: (users) => {
         AppState.connectedUsers = users || [];
+        // 각 사용자의 workStatus 정보도 보존
+        AppState.connectedUsers.forEach(user => {
+          if (!user.workStatus) {
+            user.workStatus = 'offline';  // 기본값 설정
+          }
+        });
         ConnectedUsersUI.render(AppState.connectedUsers);
       }
     };
