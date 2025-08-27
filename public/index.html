@@ -5,12 +5,39 @@
   <title>Eastalk (Web)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   
-  <!-- PWA 매니페스트 -->
-  <link rel="manifest" href="/manifest.json" />
+  <!-- PWA 매니페스트 - 404 에러 방지를 위한 조건부 로딩 -->
+  <script>
+    // 리소스 존재 확인 후 동적으로 로드 (404 오류 방지)
+    async function loadResourceIfExists(url, type = 'link') {
+      try {
+        const response = await fetch(url, { method: 'HEAD' });
+        if (response.ok) {
+          const element = document.createElement(type === 'link' ? 'link' : 'script');
+          if (type === 'link') {
+            if (url.includes('manifest.json')) {
+              element.rel = 'manifest';
+            } else if (url.includes('favicon')) {
+              element.rel = 'icon';
+            }
+            element.href = url;
+          }
+          document.head.appendChild(element);
+        }
+      } catch (error) {
+        console.log(`[리소스] ${url} 로딩 건너뜀 (404 방지):`, error.message);
+      }
+    }
+    
+    // 페이지 로드 후 선택적 리소스 로딩
+    document.addEventListener('DOMContentLoaded', () => {
+      loadResourceIfExists('/manifest.json');
+      loadResourceIfExists('/favicon.ico');
+    });
+  </script>
   
-  <!-- PWA 아이콘 및 메타 태그 -->
-  <link rel="icon" href="/favicon.ico" />
-  <link rel="apple-touch-icon" href="/favicon.ico" />
+  <!-- 기본 favicon 대신 data URI 사용 (404 방지) -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>" />
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Eastalk" />
@@ -275,8 +302,222 @@
     .shake{ animation:shake .28s ease-in-out; }
     @keyframes shake{ 0%,100%{ transform:translateX(0);} 25%{ transform:translateX(-6px);} 75%{ transform:translateX(6px);} }
 
+
+
+
+
+    .dropdown-header {
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--line);
+      background: #fafafa;
+    }
+
+    .dropdown-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: var(--line);
+    }
+
+    .dropdown-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .dropdown-name {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .dropdown-status {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .dropdown-actions {
+      padding: 8px;
+    }
+
+    .dropdown-item {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border: none;
+      background: transparent;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.15s ease;
+      font-size: 14px;
+      color: var(--text);
+      text-align: left;
+      font-family: inherit;
+    }
+
+    .dropdown-item:hover {
+      background: #f3f4f6;
+    }
+
+    .dropdown-item.danger {
+      color: #EF4444;
+    }
+
+    .dropdown-item.danger:hover {
+      background: #FEE2E2;
+    }
+
+    .item-icon {
+      font-size: 16px;
+      width: 20px;
+      text-align: center;
+    }
+
+    .dropdown-divider {
+      height: 1px;
+      background: var(--line);
+      margin: 4px 0;
+    }
+
+    /* Work Status Selector Modal */
+    .work-status-modal {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+      z-index: 10000;
+      animation: fadeIn 0.2s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .work-status-dialog {
+      width: min(400px, calc(100vw - 32px));
+      max-height: 80vh;
+      overflow-y: auto;
+      background: white;
+      border-radius: 16px;
+      box-shadow: var(--shadow-2);
+      animation: slideUp 0.2s ease-out;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .status-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .status-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .status-close {
+      width: 32px;
+      height: 32px;
+      display: grid;
+      place-items: center;
+      border: none;
+      background: transparent;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.15s ease;
+      color: var(--muted);
+      font-size: 20px;
+    }
+
+    .status-close:hover {
+      background: #f3f4f6;
+    }
+
+    .status-options {
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .status-option {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      background: white;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      text-align: left;
+    }
+
+    .status-option:hover {
+      background: #fafafa;
+      border-color: var(--accent);
+    }
+
+    .status-option.active {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .status-option-icon {
+      font-size: 24px;
+      width: 32px;
+      text-align: center;
+    }
+
+    .status-option-info {
+      flex: 1;
+    }
+
+    .status-option-name {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--text);
+    }
+
+    .status-option-desc {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .status-option.active .status-option-name,
+    .status-option.active .status-option-desc {
+      color: var(--accent-ink);
+    }
+
     /* ===== Mobile layout tweaks ===== */
-    #profileBtn{ display:none; }
+    /* Profile Button - Now Always Visible */
+    #profileBtn{ display:inline-flex; }
     #scrim{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:15; }
     
     /* 소형 모바일 (480px 이하) */
@@ -305,7 +546,8 @@
       .wrap{ flex-direction:column; gap:8px; }
       .right{ order:2; }
       .left{ display:none; }
-      #profileBtn{ display:inline-flex; height:32px; }
+      .profile-info{ display:none; } /* Hide text on mobile */
+      .profile-trigger{ padding:8px; justify-content:center; }
       #topStatus{ display:none; }
       body.profile-open #scrim{ display:block; }
       body.profile-open .left{
@@ -883,18 +1125,16 @@
   <header>
     <div class="brand">Eastalk <span>• Web</span></div>
     <div style="display:flex; gap:8px; align-items:center;">
-      <button id="profileBtn" class="btn btn-ghost">👤 프로필</button>
       <button id="toggle98" class="btn btn-ghost">🖥️ Retro 98</button>
-      <button id="logoutBtn" class="btn btn-ghost" style="display:none">로그아웃</button>
+      <button id="logoutBtn" class="btn btn-ghost">로그아웃</button>
       <div class="status" id="topStatus">—</div>
     </div>
   </header>
 
-  <div id="scrim"></div>
-
   <div class="wrap" aria-disabled="true">
     <!-- LEFT (Profile Drawer on mobile) -->
     <aside class="left">
+      <!-- 프로필 정보 (읽기 전용) -->
       <div class="profile">
         <div class="avatar"><img id="avatarImg" alt="" /></div>
         <div>
@@ -902,18 +1142,28 @@
           <div id="statusView" class="status">상태메시지…</div>
         </div>
       </div>
-      <div class="fields">
-        <input id="nickname" class="input" placeholder="닉네임" disabled />
-        <input id="status" class="input" placeholder="상태메시지 (예: 일하는 중…)" disabled />
-        <input id="avatar" class="input" placeholder="아바타 이미지 URL (선택)" disabled />
-        <!-- 추가: 아바타 지우기 -->
-        <label class="status" style="display:flex;align-items:center;gap:6px;">
-          <input type="checkbox" id="clearAvatar" disabled />
-          프로필 사진 지우기
-        </label>
-        <button id="saveBtn" class="btn btn-primary" disabled>프로필 저장</button>
-        <div class="status" id="loginNotice">* 로그인 완료 후 사용 가능합니다.</div>
+      
+      <!-- 업무 상태 표시 -->
+      <div class="work-status-display" style="margin-top:16px; padding:12px; background:#f9f9f9; border-radius:8px;">
+        <div style="font-size:12px; color:#6b7280; margin-bottom:6px;">현재 업무</div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span id="sidebarStatusIcon" style="font-size:20px;">⚪</span>
+          <span id="sidebarStatusText" style="font-weight:600; font-size:14px;">오프라인</span>
+        </div>
       </div>
+      
+      <!-- 빠른 작업 버튼들 -->
+      <div class="quick-actions" style="margin-top:16px; display:grid; gap:8px;">
+        <button class="btn btn-ghost" onclick="openProfileEditModal()" style="justify-content:flex-start;">
+          <span>✏️</span> 프로필 편집
+        </button>
+        <button class="btn btn-ghost" onclick="openWorkStatusSelector()" style="justify-content:flex-start;">
+          <span>🔄</span> 업무 상태 변경
+        </button>
+      </div>
+      
+      <!-- 로그인 안내 (로그인 전에만 표시) -->
+      <div class="status" id="loginNotice" style="margin-top:16px;">* 로그인 완료 후 사용 가능합니다.</div>
 
       <!-- 현재 접속자 -->
       <div class="connected-users" id="connectedUsers" style="display:none">
@@ -988,48 +1238,18 @@
       <div class="pname" id="pname">User</div>
       <div class="pstatus" id="pstatus">상태메시지…</div>
       
-      <!-- 🔔 알림 설정 -->
-      <div class="notification-settings" style="margin-top: 20px; padding: 15px; background: #f9f9f9; border-radius: 8px;">
+      <!-- 💼 현재 업무 상태 -->
+      <div class="work-status-modal-display" style="margin-top: 20px; padding: 15px; background: #f9f9f9; border-radius: 8px;">
         <div style="font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
-          🔔 알림 설정
+          💼 현재 업무
         </div>
-        
-        <!-- 권한 요청 버튼 -->
-        <div id="permissionRequestArea" style="margin-bottom: 12px; display: none;">
-          <div style="padding: 10px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 6px; margin-bottom: 8px; font-size: 13px; color: #856404;">
-            💡 <strong>브라우저 알림을 허용하면:</strong><br>
-            • 새 메시지를 놓치지 않을 수 있어요<br>
-            • 다른 탭을 보고 있어도 알림을 받을 수 있어요<br>
-            • 언제든지 설정에서 끌 수 있어요
-          </div>
-          <button id="requestNotificationBtn" class="btn btn-primary" style="width: 100%;">
-            🔔 브라우저 알림 허용하기
-          </button>
-        </div>
-        
-        <!-- 권한 거부 안내 -->
-        <div id="permissionDeniedArea" style="margin-bottom: 12px; display: none;">
-          <div style="padding: 10px; background: #f8d7da; border: 1px solid #f1aeb5; border-radius: 6px; font-size: 13px; color: #721c24;">
-            ❌ <strong>브라우저 알림이 차단되었습니다</strong><br>
-            탭 제목과 소리 알림은 계속 작동합니다.<br>
-            <small style="opacity: 0.8;">브라우저 설정에서 알림을 허용할 수 있습니다.</small>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span id="modalStatusIcon" style="font-size: 24px;">⚪</span>
+          <div>
+            <div id="modalStatusText" style="font-weight: 500; font-size: 14px;">오프라인</div>
+            <div id="modalStatusDesc" style="font-size: 12px; color: #6b7280;">업무 종료</div>
           </div>
         </div>
-        
-        <!-- 알림 종류 설정 -->
-        <div class="notification-status" style="display: grid; gap: 8px; background: #e8f5e8; padding: 12px; border-radius: 8px; margin-bottom: 16px;">
-          <div style="display: flex; align-items: center; gap: 8px; font-weight: 500; color: #0d7377;">
-            <span>✓ 모든 알림 기능이 활성화되어 있습니다</span>
-          </div>
-          <div style="font-size: 14px; color: #666; margin-left: 16px;">
-            • 브라우저 푸시 알림<br/>
-            • 소리 알림<br/>
-            • 탭 제목 알림<br/>
-            • 스마트 모드 (탭 비활성시만)
-          </div>
-        </div>
-        
-        <!-- 소리 설정 제거됨 - 기본 소리만 사용 -->
       </div>
     </div>
   </div>
@@ -1044,6 +1264,38 @@
       MAX_FILE_SIZE: 10 * 1024 * 1024, // 10MB
       SCROLL_THRESHOLD: 80
     };
+
+    /* ===== Work Status System ===== */
+    const WorkStatus = {
+      ticketing: { 
+        icon: '🎫', 
+        text: '발권', 
+        color: '#3B82F6'
+      },
+      checking: { 
+        icon: '✅', 
+        text: '검표', 
+        color: '#10B981'
+      },
+      patrol: { 
+        icon: '🚶', 
+        text: '순찰', 
+        color: '#F59E0B'
+      },
+      artshop: { 
+        icon: '🎨', 
+        text: '아트샵', 
+        color: '#8B5CF6'
+      },
+      offline: { 
+        icon: '⚪', 
+        text: '오프라인', 
+        color: '#6B7280'
+      }
+    };
+
+    // Current work status
+    let currentWorkStatus = 'offline';
 
     /* ===== 프로필 편집 모달 시스템 ===== */
     class ProfileEditModal {
@@ -1072,55 +1324,120 @@
       }
 
       bindElements() {
-        this.modal = document.getElementById('profileEditModal');
-        this.currentProfileImg = document.getElementById('currentProfileImg');
-        this.changeImageBtn = document.getElementById('changeImageBtn');
-        this.imageUploadArea = document.getElementById('imageUploadArea');
-        this.editNickname = document.getElementById('editNickname');
-        this.editStatusMessage = document.getElementById('editStatusMessage');
-        this.nicknameCount = document.getElementById('nicknameCount');
-        this.statusCount = document.getElementById('statusCount');
+        try {
+          console.log('🔗 ProfileEditModal 요소 바인딩 시작');
+          
+          // 필수 요소들을 안전하게 바인딩
+          const requiredElements = {
+            modal: 'profileEditModal',
+            currentProfileImg: 'currentProfileImg',
+            changeImageBtn: 'changeImageBtn',
+            imageUploadArea: 'imageUploadArea',
+            editNickname: 'editNickname',
+            editStatusMessage: 'editStatusMessage',
+            nicknameCount: 'nicknameCount',
+            statusCount: 'statusCount'
+          };
+
+          const missingElements = [];
+
+          for (const [property, elementId] of Object.entries(requiredElements)) {
+            const element = document.getElementById(elementId);
+            this[property] = element;
+            
+            if (!element) {
+              missingElements.push(elementId);
+              console.warn(`⚠️ ProfileEditModal: ${elementId} 요소를 찾을 수 없습니다`);
+            }
+          }
+
+          if (missingElements.length > 0) {
+            throw new Error(`필수 요소들을 찾을 수 없습니다: ${missingElements.join(', ')}`);
+          }
+
+          console.log('✅ ProfileEditModal 요소 바인딩 완료');
+        } catch (error) {
+          console.error('❌ ProfileEditModal 요소 바인딩 실패:', error);
+          throw error;
+        }
       }
 
       bindEvents() {
-        // 닉네임 글자 수 카운터
-        this.editNickname.addEventListener('input', (e) => {
-          const count = e.target.value.length;
-          this.nicknameCount.textContent = count;
-          if (count > 20) {
-            e.target.value = e.target.value.substring(0, 20);
-            this.nicknameCount.textContent = 20;
+        try {
+          console.log('🎯 ProfileEditModal 이벤트 바인딩 시작');
+          
+          // 닉네임 글자 수 카운터 - null 체크 포함
+          if (this.editNickname && this.nicknameCount) {
+            this.editNickname.addEventListener('input', (e) => {
+              const count = e.target.value.length;
+              this.nicknameCount.textContent = count;
+              if (count > 20) {
+                e.target.value = e.target.value.substring(0, 20);
+                this.nicknameCount.textContent = 20;
+              }
+            });
+          } else {
+            console.warn('⚠️ 닉네임 카운터 바인딩 실패');
           }
-        });
 
-        // 상태 메시지 글자 수 카운터
-        this.editStatusMessage.addEventListener('input', (e) => {
-          const count = e.target.value.length;
-          this.statusCount.textContent = count;
-          if (count > 50) {
-            e.target.value = e.target.value.substring(0, 50);
-            this.statusCount.textContent = 50;
+          // 상태 메시지 글자 수 카운터 - null 체크 포함
+          if (this.editStatusMessage && this.statusCount) {
+            this.editStatusMessage.addEventListener('input', (e) => {
+              const count = e.target.value.length;
+              this.statusCount.textContent = count;
+              if (count > 50) {
+                e.target.value = e.target.value.substring(0, 50);
+                this.statusCount.textContent = 50;
+              }
+            });
+          } else {
+            console.warn('⚠️ 상태 메시지 카운터 바인딩 실패');
           }
-        });
 
-        // 이미지 변경 버튼
-        this.changeImageBtn.addEventListener('click', () => {
-          this.toggleImageUpload();
-        });
-
-        // 모달 외부 클릭 시 닫기
-        this.modal.addEventListener('click', (e) => {
-          if (e.target === this.modal) {
-            this.close();
+          // 이미지 변경 버튼 - null 체크 포함
+          if (this.changeImageBtn) {
+            this.changeImageBtn.addEventListener('click', () => {
+              try {
+                this.toggleImageUpload();
+              } catch (error) {
+                console.error('🖼️ 이미지 토글 실패:', error);
+              }
+            });
+          } else {
+            console.warn('⚠️ 이미지 변경 버튼 바인딩 실패');
           }
-        });
 
-        // ESC 키로 모달 닫기
-        document.addEventListener('keydown', (e) => {
-          if (e.key === 'Escape' && this.isOpen()) {
-            this.close();
+          // 모달 외부 클릭 시 닫기 - null 체크 포함
+          if (this.modal) {
+            this.modal.addEventListener('click', (e) => {
+              if (e.target === this.modal) {
+                try {
+                  this.close();
+                } catch (error) {
+                  console.error('❌ 모달 닫기 실패:', error);
+                }
+              }
+            });
+          } else {
+            console.warn('⚠️ 모달 외부 클릭 바인딩 실패');
           }
-        });
+
+          // ESC 키로 모달 닫기 - 전역 이벤트이므로 항상 바인딩
+          document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.isOpen()) {
+              try {
+                this.close();
+              } catch (error) {
+                console.error('❌ ESC 키 모달 닫기 실패:', error);
+              }
+            }
+          });
+
+          console.log('✅ ProfileEditModal 이벤트 바인딩 완료');
+        } catch (error) {
+          console.error('❌ ProfileEditModal 이벤트 바인딩 실패:', error);
+          throw error;
+        }
       }
 
       initUppy() {
@@ -1450,10 +1767,120 @@
       profileEditModal.open();
     }
 
+    function openProfileEdit() {
+      openProfileEditModal();
+    }
+
     function closeProfileEditModal() {
       if (profileEditModal) {
         profileEditModal.close();
       }
+    }
+
+    // Work Status Functions
+    function openWorkStatusSelector() {
+      const modal = document.getElementById('workStatusModal');
+      if (modal) {
+        modal.style.display = 'grid';
+        // Update active status
+        document.querySelectorAll('.status-option').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.status === currentWorkStatus);
+        });
+      }
+    }
+
+    function closeWorkStatusSelector() {
+      const modal = document.getElementById('workStatusModal');
+      if (modal) {
+        modal.style.display = 'none';
+      }
+    }
+
+    function selectWorkStatus(status) {
+      currentWorkStatus = status;
+      updateWorkStatusDisplay();
+      closeWorkStatusSelector();
+      
+      // Save to localStorage
+      if (window.localStorage) {
+        localStorage.setItem('workStatus', status);
+      }
+      
+      // TODO: Send to server via Socket.IO
+      if (window.socket && window.socket.connected) {
+        socket.emit('updateWorkStatus', {
+          status: status,
+          timestamp: Date.now()
+        });
+      }
+    }
+
+    function updateWorkStatusDisplay() {
+      const status = WorkStatus[currentWorkStatus] || WorkStatus.offline;
+      
+      // Update header work status
+      const headerWorkStatus = document.getElementById('headerWorkStatus');
+      if (headerWorkStatus) {
+        headerWorkStatus.textContent = status.text;
+      }
+      
+      // Update work status dot
+      const headerStatusDot = document.getElementById('headerStatusDot');
+      if (headerStatusDot) {
+        headerStatusDot.className = 'work-status-dot ' + currentWorkStatus;
+      }
+      
+      // Update dropdown status
+      const dropdownStatus = document.getElementById('dropdownStatus');
+      if (dropdownStatus) {
+        dropdownStatus.textContent = status.text;
+      }
+      
+      // Update sidebar work status
+      const sidebarStatusIcon = document.getElementById('sidebarStatusIcon');
+      const sidebarStatusText = document.getElementById('sidebarStatusText');
+      if (sidebarStatusIcon) sidebarStatusIcon.textContent = status.icon;
+      if (sidebarStatusText) sidebarStatusText.textContent = status.text;
+      
+      // Update status selector icon and text
+      const statusIcon = document.getElementById('statusIcon');
+      const statusText = document.getElementById('statusText');
+      if (statusIcon) statusIcon.textContent = status.icon;
+      if (statusText) statusText.textContent = `업무 상태: ${status.text}`;
+      
+      // Update modal work status
+      updateModalWorkStatus();
+    }
+
+    function updateModalWorkStatus() {
+      const status = WorkStatus[currentWorkStatus] || WorkStatus.offline;
+      
+      // Update modal work status display
+      const modalStatusIcon = document.getElementById('modalStatusIcon');
+      const modalStatusText = document.getElementById('modalStatusText');
+      const modalStatusDesc = document.getElementById('modalStatusDesc');
+      
+      if (modalStatusIcon) modalStatusIcon.textContent = status.icon;
+      if (modalStatusText) modalStatusText.textContent = status.text;
+      if (modalStatusDesc) modalStatusDesc.textContent = status.description || (status.text === '오프라인' ? '업무 종료' : '업무 중');
+    }
+
+
+
+    // Settings function placeholder
+    function openSettings() {
+      alert('설정 기능은 준비 중입니다.');
+    }
+
+    // Initialize work status from localStorage
+    function initializeWorkStatus() {
+      if (window.localStorage) {
+        const savedStatus = localStorage.getItem('workStatus');
+        if (savedStatus && WorkStatus[savedStatus]) {
+          currentWorkStatus = savedStatus;
+        }
+      }
+      updateWorkStatusDisplay();
     }
 
     function saveProfileChanges() {
@@ -1466,16 +1893,37 @@
     function updateProfileUI() {
       if (!AppState.me) return;
       
-      // 닉네임 업데이트
+      // 사이드바 닉네임 업데이트
       const nicknameView = document.getElementById('nicknameView');
       if (nicknameView) {
         nicknameView.textContent = AppState.me.nickname || 'User';
       }
       
-      // 아바타 이미지 업데이트
+      // 헤더 프로필 정보 업데이트
+      const headerName = document.getElementById('headerName');
+      if (headerName) {
+        headerName.textContent = AppState.me.nickname || AppState.me.username || 'User';
+      }
+      
+      // 헤더 아바타 업데이트
+      const headerAvatar = document.getElementById('headerAvatar');
+      if (headerAvatar) {
+        if (AppState.me.profileImage && AppState.me.profileImage.trim()) {
+          headerAvatar.src = AppState.me.profileImage;
+        } else if (AppState.me.avatar && AppState.me.avatar.trim()) {
+          headerAvatar.src = AppState.me.avatar;
+        } else {
+          headerAvatar.src = '/favicon.ico'; // Default avatar
+        }
+      }
+      
+      // 사이드바 아바타 이미지 업데이트
       const avatarImg = document.getElementById('avatarImg');
       if (avatarImg) {
-        if (AppState.me.avatar && AppState.me.avatar.trim()) {
+        if (AppState.me.profileImage && AppState.me.profileImage.trim()) {
+          avatarImg.src = AppState.me.profileImage;
+          avatarImg.style.visibility = 'visible';
+        } else if (AppState.me.avatar && AppState.me.avatar.trim()) {
           avatarImg.src = AppState.me.avatar;
           avatarImg.style.visibility = 'visible';
         } else {
@@ -2421,19 +2869,53 @@
     TabActivityMonitor.init();
     
     /* ===== 도우미 함수들 ===== */
-    // DOM 유틸리티
+    // DOM 유틸리티 - 현대적인 에러 처리와 null 체크 적용
     const DOM = {
-      el: (selector) => document.querySelector(selector),
-      elAll: (selector) => document.querySelectorAll(selector),
+      el: (selector) => {
+        try {
+          const element = document.querySelector(selector);
+          if (!element) {
+            console.warn(`[DOM] 요소를 찾을 수 없습니다: ${selector}`);
+          }
+          return element;
+        } catch (error) {
+          console.error(`[DOM] 선택자 오류: ${selector}`, error);
+          return null;
+        }
+      },
+      elAll: (selector) => {
+        try {
+          return document.querySelectorAll(selector);
+        } catch (error) {
+          console.error(`[DOM] 선택자 오류: ${selector}`, error);
+          return [];
+        }
+      },
       create: (tag, className) => {
-        const el = document.createElement(tag);
-        if (className) el.className = className;
-        return el;
+        try {
+          const el = document.createElement(tag);
+          if (className) el.className = className;
+          return el;
+        } catch (error) {
+          console.error(`[DOM] 요소 생성 오류: ${tag}`, error);
+          return null;
+        }
+      },
+      // 안전한 이벤트 바인딩 유틸리티
+      safeAssign: (selector, property, value) => {
+        const element = DOM.el(selector);
+        if (element && property in element) {
+          element[property] = value;
+          return true;
+        } else {
+          console.warn(`[DOM] 안전 할당 실패: ${selector}.${property}`);
+          return false;
+        }
       }
     };
     
-    // 레거시 지원을 위한 el 함수 복원
-    const el = (selector) => document.querySelector(selector);
+    // 레거시 지원을 위한 el 함수 복원 - DOM.el과 동일한 안전성 제공
+    const el = (selector) => DOM.el(selector);
     
     // 캐시 도우미
     const messagesEl = DOM.el('#messages');
@@ -2514,17 +2996,57 @@
       localStorage.setItem('theme98',''+(on?1:0));
     };
     const restoreTheme98 = ()=> applyTheme98(localStorage.getItem('theme98')==='1');
-    let audioCtx=null;
+    // 오디오 시스템 - 개선된 에러 처리와 폴백
+    let audioCtx = null;
+    let audioInitialized = false;
+    
     function beep(){
+      // 테마가 활성화되지 않았으면 조용히 반환
       if (!document.body.classList.contains('win98')) return;
-      try{
-        audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
-        const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
-        o.type='square'; o.frequency.value=800;
-        g.gain.setValueAtTime(0.06, audioCtx.currentTime);
-        g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+0.08);
-        o.connect(g).connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+0.09);
-      }catch(e){}
+      
+      try {
+        // AudioContext 초기화 (지연 초기화)
+        if (!audioCtx) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (!AudioContextClass) {
+            console.warn('[사운드] Web Audio API를 지원하지 않는 브라우저입니다');
+            return;
+          }
+          
+          audioCtx = new AudioContextClass();
+          console.log('[사운드] AudioContext 초기화 완료');
+        }
+
+        // AudioContext 재개 (브라우저 정책으로 인한 suspend 상태 해결)
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume().catch(err => {
+            console.warn('[사운드] AudioContext 재개 실패:', err);
+          });
+        }
+
+        // 사운드 생성
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        
+        oscillator.type = 'square';
+        oscillator.frequency.value = 800;
+        
+        gainNode.gain.setValueAtTime(0.06, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.08);
+        
+        oscillator.connect(gainNode).connect(audioCtx.destination);
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.09);
+        
+        audioInitialized = true;
+
+      } catch (error) {
+        // 조용한 실패 - 사운드는 필수가 아니므로 로그만 남김
+        if (!audioInitialized) {
+          console.warn('[사운드] 오디오 시스템 초기화 실패:', error.message);
+          audioInitialized = true; // 재시도 방지
+        }
+      }
     }
     function attachBeepTo(selector){
       document.addEventListener('click', (e)=>{
@@ -3114,6 +3636,10 @@
         img.removeAttribute('src');
         img.style.display='none';
       }
+      
+      // 현재 업무 상태 표시 업데이트
+      updateModalWorkStatus();
+      
       DOM.el('#pmodal').classList.add('show');
       DOM.el('#pmodal').setAttribute('aria-hidden','false');
     }
@@ -3640,63 +4166,144 @@
     }
 
     function bindUI(){
-      DOM.el('#sendBtn').onclick=sendText;
-      DOM.el('#text').addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendText(); } });
-
-      // 프로필 저장
-      DOM.el('#saveBtn').onclick= async ()=>{
-        if(!AppState.userId) return;
-        const nickname = DOM.el('#nickname').value;
-        const status   = DOM.el('#status').value;
-        const avValue  = (DOM.el('#avatar').value||'').trim();
-        const clearAv  = DOM.el('#clearAvatar').checked;
-
-        const profile = { nickname, status };
-        if (clearAv) profile.clearAvatar = true;   
-        if (avValue) profile.avatar = avValue;     
-
-        try {
-          const u = await apiCall('PUT', `/api/profile/${AppState.userId}`, profile);
-          AppState.me = u;
-          DOM.el('#nicknameView').textContent = u.nickname || 'User';
-          DOM.el('#statusView').textContent = u.status || '상태메시지…';
-          DOM.el('#topStatus').textContent = (u.nickname || 'User') + (u.status ? ` — ${u.status}` : '');
-          setAvatar(u.avatar || '');
-          DOM.el('#avatar').value = u.avatar || '';
-          DOM.el('#clearAvatar').checked = false;
-          
-          // 접속자 정보 업데이트 알림
-          socket.emit('userProfileUpdated', {
-            userId: AppState.userId,
-            nickname: u.nickname,
-            avatar: u.avatar,
-            status: u.status
-          });
-          
-          beep();
-        } catch (error) {
-          alert('저장 실패: ' + error.message);
+      console.log('[UI] bindUI 함수 시작 - 안전한 이벤트 바인딩 적용');
+      
+      try {
+        // 안전한 이벤트 바인딩 - Fail Fast 원칙 적용
+        if (!DOM.safeAssign('#sendBtn', 'onclick', sendText)) {
+          console.error('[UI] sendBtn 바인딩 실패');
         }
-      };
+        
+        const textElement = DOM.el('#text');
+        if (textElement) {
+          textElement.addEventListener('keydown', e => { 
+            if (e.key === 'Enter' && !e.shiftKey) { 
+              e.preventDefault(); 
+              sendText(); 
+            } 
+          });
+        } else {
+          console.warn('[UI] text 입력 요소를 찾을 수 없습니다');
+        }
 
-      // 아바타 입력 시 "지우기" 자동 해제
-      DOM.el('#avatar').addEventListener('input', ()=>{
-        if ((DOM.el('#avatar').value||'').trim()) DOM.el('#clearAvatar').checked = false;
-      });
+        // 프로필 저장 - 안전한 바인딩과 에러 처리 강화
+        const saveBtn = DOM.el('#saveBtn');
+        if (saveBtn) {
+          saveBtn.onclick = async () => {
+            try {
+              // Fail Fast 원칙: 조기 검증
+              if (!AppState.userId) {
+                console.warn('[프로필] 사용자 ID가 없습니다');
+                return;
+              }
 
-      // 사진 업로드
-      DOM.el('#photoBtn').onclick=()=>{ if(AppState.userId) DOM.el('#image').click(); };
-      DOM.el('#image').addEventListener('change', async ()=>{
-        const f=DOM.el('#image').files[0];
-        if(!AppState.userId||!f||AppState.flags.uploading) return;
-        if(f.size>10*1024*1024){ alert('10MB 이하만 업로드 가능합니다.'); DOM.el('#image').value=''; return; }
+              // 안전한 DOM 요소 접근
+              const nicknameEl = DOM.el('#nickname');
+              const statusEl = DOM.el('#status');
+              const avatarEl = DOM.el('#avatar');
+              const clearAvEl = DOM.el('#clearAvatar');
+              
+              if (!nicknameEl || !statusEl || !avatarEl || !clearAvEl) {
+                throw new Error('프로필 폼 요소를 찾을 수 없습니다');
+              }
 
-        const uploadRoom = AppState.currentRoom;
-        AppState.flags.uploading = true;
-        DOM.el('#photoBtn').disabled = true;
-        const mid = Utils.generateMessageId();
+              const nickname = nicknameEl.value;
+              const status = statusEl.value;
+              const avValue = (avatarEl.value || '').trim();
+              const clearAv = clearAvEl.checked;
 
-        try {
+              const profile = { nickname, status };
+              if (clearAv) profile.clearAvatar = true;   
+              if (avValue) profile.avatar = avValue;     
+
+              console.log('[프로필] 저장 시도:', profile);
+              const u = await apiCall('PUT', `/api/profile/${AppState.userId}`, profile);
+              
+              // 안전한 UI 업데이트
+              AppState.me = u;
+              const nicknameView = DOM.el('#nicknameView');
+              const statusView = DOM.el('#statusView');
+              const topStatus = DOM.el('#topStatus');
+              
+              if (nicknameView) nicknameView.textContent = u.nickname || 'User';
+              if (statusView) statusView.textContent = u.status || '상태메시지…';
+              if (topStatus) topStatus.textContent = (u.nickname || 'User') + (u.status ? ` — ${u.status}` : '');
+              
+              setAvatar(u.avatar || '');
+              if (avatarEl) avatarEl.value = u.avatar || '';
+              if (clearAvEl) clearAvEl.checked = false;
+              
+              // 접속자 정보 업데이트 알림
+              if (socket && socket.emit) {
+                socket.emit('userProfileUpdated', {
+                  userId: AppState.userId,
+                  nickname: u.nickname,
+                  avatar: u.avatar,
+                  status: u.status
+                });
+              }
+              
+              console.log('[프로필] 저장 성공');
+              beep();
+            } catch (error) {
+              console.error('[프로필] 저장 실패:', error);
+              alert('저장 실패: ' + error.message);
+            }
+          };
+        } else {
+          console.warn('[UI] saveBtn 요소를 찾을 수 없습니다');
+        }
+
+        // 아바타 입력 시 "지우기" 자동 해제 - 안전한 바인딩
+        const avatarInput = DOM.el('#avatar');
+        const clearAvatarCheckbox = DOM.el('#clearAvatar');
+        if (avatarInput && clearAvatarCheckbox) {
+          avatarInput.addEventListener('input', () => {
+            if ((avatarInput.value || '').trim()) {
+              clearAvatarCheckbox.checked = false;
+            }
+          });
+        } else {
+          console.warn('[UI] 아바타 입력 요소를 찾을 수 없습니다');
+        }
+
+        // 사진 업로드 - 안전한 바인딩
+        const photoBtn = DOM.el('#photoBtn');
+        const imageInput = DOM.el('#image');
+        
+        if (photoBtn && imageInput) {
+          photoBtn.onclick = () => { 
+            if (AppState.userId) {
+              imageInput.click(); 
+            } else {
+              console.warn('[업로드] 로그인이 필요합니다');
+            }
+          };
+          
+          imageInput.addEventListener('change', async () => {
+            try {
+              const f = imageInput.files[0];
+              
+              // Fail Fast 원칙: 조기 검증
+              if (!AppState.userId || !f || AppState.flags.uploading) {
+                console.log('[업로드] 업로드 조건 불충족');
+                return;
+              }
+              
+              if (f.size > 10 * 1024 * 1024) { 
+                alert('10MB 이하만 업로드 가능합니다.'); 
+                imageInput.value = ''; 
+                return; 
+              }
+
+              const uploadRoom = AppState.currentRoom;
+              AppState.flags.uploading = true;
+              
+              // 안전한 버튼 비활성화
+              if (photoBtn) photoBtn.disabled = true;
+              
+              const mid = Utils.generateMessageId();
+              console.log('[업로드] 파일 업로드 시작:', f.name);
           // 파일을 base64로 변환
           const base64Data = await new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -3727,119 +4334,198 @@
             throw new Error(error.error || '업로드 실패');
           }
 
-          const result = await response.json();
-          AppState.flags.uploading = false;
-          DOM.el('#photoBtn').disabled = false;
-          DOM.el('#image').value = '';
-          AppState.cache.lastTs[uploadRoom] = Math.max(AppState.cache.lastTs[uploadRoom]||0, result.ts||0);
-          if (AppState.currentRoom !== uploadRoom) return;
-          if (!AppState.cache.renderedMids[uploadRoom].has(result.mid)) {
-            addOrUpdateMsg(result);
+              const result = await response.json();
+              
+              // 안전한 상태 복원
+              AppState.flags.uploading = false;
+              if (photoBtn) photoBtn.disabled = false;
+              imageInput.value = '';
+              
+              AppState.cache.lastTs[uploadRoom] = Math.max(AppState.cache.lastTs[uploadRoom] || 0, result.ts || 0);
+              if (AppState.currentRoom !== uploadRoom) return;
+              if (!AppState.cache.renderedMids[uploadRoom].has(result.mid)) {
+                addOrUpdateMsg(result);
+              }
+              
+              console.log('[업로드] 업로드 성공:', result.mid);
+              beep();
+            } catch (error) {
+              console.error('[업로드] 업로드 실패:', error);
+              
+              // 안전한 상태 복원
+              AppState.flags.uploading = false;
+              if (photoBtn) photoBtn.disabled = false;
+              imageInput.value = '';
+              
+              alert('업로드 실패: ' + error.message);
+            }
+          });
+        } else {
+          console.warn('[UI] 사진 업로드 요소를 찾을 수 없습니다');
+        }
+
+        // 나머지 UI 바인딩 - 안전한 바인딩
+        if (!DOM.safeAssign('#startBtn', 'onclick', doLogin)) {
+          console.error('[UI] startBtn 바인딩 실패');
+        }
+        
+        if (!DOM.safeAssign('#logoutBtn', 'onclick', doLogout)) {
+          console.error('[UI] logoutBtn 바인딩 실패');
+        }
+        
+        // 답글 취소 버튼
+        const cancelReplyBtn = el('#cancelReply');
+        if (cancelReplyBtn) {
+          cancelReplyBtn.onclick = () => ReplyManager.cancelReply();
+        } else {
+          console.warn('[UI] cancelReply 버튼을 찾을 수 없습니다');
+        }
+        
+        // 무한 스크롤 - 100개 더 보기 버튼
+        el('#loadMoreBtn').onclick = async () => {
+          const btn = DOM.el('#loadMoreBtn');
+          const textSpan = DOM.el('.load-more-text');
+          const spinnerSpan = DOM.el('.load-more-spinner');
+          
+          btn.disabled = true;
+          textSpan.style.display = 'none';
+          spinnerSpan.style.display = 'inline';
+          
+          try {
+            const success = await DataManager.loadPastMessages();
+            if (success) {
+              MessageManager.updateLoadMoreButton();
+            }
+          } catch (error) {
+            console.error('과거 메시지 로드 실패:', error);
+          } finally {
+            btn.disabled = false;
+            textSpan.style.display = 'inline';
+            spinnerSpan.style.display = 'none';
           }
-          beep();
-        } catch (error) {
-          AppState.flags.uploading = false;
-          DOM.el('#photoBtn').disabled = false;
-          DOM.el('#image').value = '';
-          alert('업로드 실패: '+error.message);
-        }
-      });
+        };
 
-      el('#startBtn').onclick=doLogin;
-      el('#logoutBtn').onclick=doLogout;
-      
-      // 🔗 답글 취소 버튼
-      el('#cancelReply').onclick = () => ReplyManager.cancelReply();
+        // Retro toggle
+        el('#toggle98').addEventListener('click', ()=>{ applyTheme98(!document.body.classList.contains('win98')); beep(); });
 
-      // 무한 스크롤 - 100개 더 보기 버튼
-      el('#loadMoreBtn').onclick = async () => {
-        const btn = DOM.el('#loadMoreBtn');
-        const textSpan = DOM.el('.load-more-text');
-        const spinnerSpan = DOM.el('.load-more-spinner');
-        
-        btn.disabled = true;
-        textSpan.style.display = 'none';
-        spinnerSpan.style.display = 'inline';
-        
-        try {
-          const success = await DataManager.loadPastMessages();
-          if (success) {
-            MessageManager.updateLoadMoreButton();
+        // 프로필 모달 기본 동작
+        bindProfileModalBasics();
+
+        // 드래그 가능한 로그인 다이얼로그
+        makeDialogDraggable('#dialogCard','#dlgDragHandle');
+
+        // 리사이즈 시 탭 라벨/상태 갱신
+        let lastCompact = UI.isCompact();
+        window.addEventListener('resize', ()=>{
+          const nowCompact = UI.isCompact();
+          if (nowCompact !== lastCompact){
+            UI.drawTabs(); UI.setActiveTabUI();
+            lastCompact = nowCompact;
           }
-        } catch (error) {
-          console.error('과거 메시지 로드 실패:', error);
-        } finally {
-          btn.disabled = false;
-          textSpan.style.display = 'inline';
-          spinnerSpan.style.display = 'none';
-        }
-      };
-
-      // Retro toggle
-      el('#toggle98').addEventListener('click', ()=>{ applyTheme98(!document.body.classList.contains('win98')); beep(); });
-
-      // Profile drawer toggle (mobile) - 새로운 프로필 편집 모달 열기
-      el('#profileBtn').addEventListener('click', () => {
-        // 로그인 상태 확인
-        if (!AppState.me || !AppState.userId) {
-          alert('로그인 후 이용 가능합니다.');
-          return;
-        }
+        });
         
-        // 새로운 프로필 편집 모달 열기
-        openProfileEditModal();
-      });
-      el('#scrim').addEventListener('click', ()=>{ document.body.classList.remove('profile-open'); });
-
-      // 프로필 모달 기본 동작
-      bindProfileModalBasics();
-
-      // 드래그 가능한 로그인 다이얼로그
-      makeDialogDraggable('#dialogCard','#dlgDragHandle');
-
-      // 리사이즈 시 탭 라벨/상태 갱신
-      let lastCompact = UI.isCompact();
-      window.addEventListener('resize', ()=>{
-        const nowCompact = UI.isCompact();
-        if (nowCompact !== lastCompact){
-          UI.drawTabs(); UI.setActiveTabUI();
-          lastCompact = nowCompact;
-        }
-      });
+        console.log('[UI] bindUI 함수 완료 - 모든 이벤트 바인딩 안전하게 처리됨');
+        
+      } catch (error) {
+        console.error('[UI] bindUI 함수 오류:', error);
+        throw error; // Re-throw to ensure caller knows about the error
+      }
     }
 
-    /* ===== Login ===== */
+    /* ===== Login - 현대적인 에러 처리와 상태 관리 ===== */
     async function doLogin(){
-      const loginBtn = DOM.el('#startBtn');
-      loginBtn.disabled = true;
-      const card = DOM.el('#dialogCard');
-      const name=(DOM.el('#loginName').value||'').trim();
-      const b4=(DOM.el('#loginBirth').value||'').replace(/\D/g,'').slice(0,4);
-      if(!name || b4.length!==4){ 
-        loginBtn.disabled = false;
-        card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); 
-        return; 
-      }
-
+      console.log('[로그인] 로그인 프로세스 시작');
+      
       try {
+        // DOM 요소들을 안전하게 가져오기
+        const loginBtn = DOM.el('#startBtn');
+        const card = DOM.el('#dialogCard');
+        const nameInput = DOM.el('#loginName');
+        const birthInput = DOM.el('#loginBirth');
+        const authDiv = DOM.el('#auth');
+
+        // Fail Fast: 필수 요소 검증
+        if (!loginBtn || !nameInput || !birthInput || !authDiv) {
+          throw new Error('로그인 폼 요소를 찾을 수 없습니다');
+        }
+
+        // 로그인 버튼 비활성화
+        loginBtn.disabled = true;
+        loginBtn.textContent = '로그인 중...';
+
+        // 입력값 검증
+        const name = (nameInput.value || '').trim();
+        const b4 = (birthInput.value || '').replace(/\D/g, '').slice(0, 4);
+        
+        if (!name || b4.length !== 4) { 
+          console.warn('[로그인] 입력값 검증 실패:', { name: !!name, birth4Length: b4.length });
+          
+          // 시각적 피드백
+          if (card) {
+            card.classList.remove('shake'); 
+            void card.offsetWidth; // Force reflow
+            card.classList.add('shake'); 
+          }
+          
+          // 상태 복원
+          loginBtn.disabled = false;
+          loginBtn.textContent = '시작하기';
+          return; 
+        }
+
+        console.log('[로그인] API 호출 시작:', { name, birth4: b4 });
         const u = await apiCall('POST', '/api/login', { name, birth4: b4 });
+        
+        if (!u || !u.id) {
+          throw new Error('서버에서 유효하지 않은 응답을 받았습니다');
+        }
+
+        // 로그인 성공 - 상태 업데이트
+        console.log('[로그인] 로그인 성공:', { userId: u.id, name: u.nickname });
         AppState.userId = u.id;
-        DOM.el('#auth').classList.add('hidden'); 
+        
+        // UI 상태 변경
+        authDiv.classList.add('hidden'); 
         document.body.classList.remove('auth-open');
         enableUI(true); 
         UI.drawTabs(); 
-        initMe();
-        socket.emit('joinRoom', AppState.currentRoom);
         
-        // 접속자 목록에 추가
-        socket.emit('userLogin', { userId: AppState.userId });
+        // 사용자 정보 초기화
+        await initMe();
         
+        // 소켓 연결
+        if (socket && socket.emit) {
+          socket.emit('joinRoom', AppState.currentRoom);
+          socket.emit('userLogin', { userId: AppState.userId });
+        } else {
+          console.warn('[로그인] 소켓이 연결되지 않았습니다');
+        }
+        
+        console.log('[로그인] 로그인 프로세스 완료');
         beep();
+
       } catch (error) {
-        console.error('Login error:', error);
-        alert('로그인 실패: ' + error.message);
+        console.error('[로그인] 로그인 실패:', error);
+        
+        // 사용자에게 명확한 에러 메시지 제공
+        let userMessage = '로그인에 실패했습니다.';
+        if (error.message.includes('네트워크')) {
+          userMessage = '네트워크 연결을 확인해주세요.';
+        } else if (error.message.includes('서버')) {
+          userMessage = '서버와의 통신에 문제가 있습니다.';
+        } else if (error.message.includes('유효하지 않은')) {
+          userMessage = '로그인 정보가 올바르지 않습니다.';
+        }
+        
+        alert(userMessage + '\n\n기술적 세부사항: ' + error.message);
+        
       } finally {
-        loginBtn.disabled = false;
+        // 상태 복원 - 안전한 처리
+        const loginBtn = DOM.el('#startBtn');
+        if (loginBtn) {
+          loginBtn.disabled = false;
+          loginBtn.textContent = '시작하기';
+        }
       }
     }
 
@@ -4038,6 +4724,21 @@
         return false;
       }
     };
+
+    // ===== Initialize Modern Profile System =====
+    // Initialize work status on page load
+    document.addEventListener('DOMContentLoaded', function() {
+      initializeWorkStatus();
+      console.log('🔧 Modern Profile System initialized');
+    });
+
+    // Initialize work status when user logs in
+    const originalUpdateProfile = window.updateProfileUI || updateProfileUI;
+    window.updateProfileUI = function() {
+      originalUpdateProfile.apply(this, arguments);
+      initializeWorkStatus(); // Re-initialize work status on profile update
+      updateDropdownInfo(); // Update dropdown info
+    };
   </script>
 
   <!-- Profile Edit Modal -->
@@ -4096,6 +4797,53 @@
   
   <!-- Uppy.js JavaScript -->
   <script src="https://releases.transloadit.com/uppy/v3.25.0/uppy.min.js"></script>
+  
+  <!-- Work Status Selector Modal (Hidden by default) -->
+  <div id="workStatusModal" class="work-status-modal" style="display:none;">
+    <div class="work-status-dialog">
+      <div class="status-header">
+        <h3 class="status-title">업무 상태 변경</h3>
+        <button class="status-close" onclick="closeWorkStatusSelector()">✕</button>
+      </div>
+      <div class="status-options">
+        <button class="status-option" data-status="ticketing" onclick="selectWorkStatus('ticketing')">
+          <span class="status-option-icon">🎫</span>
+          <div class="status-option-info">
+            <div class="status-option-name">발권</div>
+            <div class="status-option-desc">발권 업무 진행 중</div>
+          </div>
+        </button>
+        <button class="status-option" data-status="checking" onclick="selectWorkStatus('checking')">
+          <span class="status-option-icon">✅</span>
+          <div class="status-option-info">
+            <div class="status-option-name">검표</div>
+            <div class="status-option-desc">검표 업무 진행 중</div>
+          </div>
+        </button>
+        <button class="status-option" data-status="patrol" onclick="selectWorkStatus('patrol')">
+          <span class="status-option-icon">🚶</span>
+          <div class="status-option-info">
+            <div class="status-option-name">순찰</div>
+            <div class="status-option-desc">순찰 중</div>
+          </div>
+        </button>
+        <button class="status-option" data-status="artshop" onclick="selectWorkStatus('artshop')">
+          <span class="status-option-icon">🎨</span>
+          <div class="status-option-info">
+            <div class="status-option-name">아트샵</div>
+            <div class="status-option-desc">아트샵 업무 중</div>
+          </div>
+        </button>
+        <button class="status-option" data-status="offline" onclick="selectWorkStatus('offline')">
+          <span class="status-option-icon">⚪</span>
+          <div class="status-option-info">
+            <div class="status-option-name">오프라인</div>
+            <div class="status-option-desc">업무 종료</div>
+          </div>
+        </button>
+      </div>
+    </div>
+  </div>
   
 </body>
 </html>
