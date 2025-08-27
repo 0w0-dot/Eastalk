@@ -1297,6 +1297,55 @@
     // Current work status
     let currentWorkStatus = 'offline';
 
+    /* ===== 전역 스크롤 네비게이션 함수 ===== */
+    // 🔗 답글 클릭시 원본 메시지로 스크롤하는 전역 함수 (즉시 정의)
+    console.log('🌍 전역 scrollToMessage 함수 정의 중...');
+    
+    function scrollToMessage(messageId) {
+      console.log(`🌍 전역 scrollToMessage 호출: ${messageId}`);
+      
+      if (!messageId) {
+        console.warn('⚠️ messageId가 제공되지 않았습니다');
+        return false;
+      }
+      
+      // ScrollManager가 초기화되어 있으면 사용
+      if (window.ScrollManager && window.ScrollManager.scrollToMessage) {
+        console.log('📋 ScrollManager를 통해 스크롤 실행');
+        return window.ScrollManager.scrollToMessage(messageId);
+      } else {
+        console.warn('ScrollManager가 아직 초기화되지 않았습니다. 대체 방법 시도...');
+        
+        // ScrollManager가 없을 경우 직접 스크롤 시도
+        const targetElement = document.querySelector(`[data-mid="${messageId}"]`);
+        if (targetElement) {
+          console.log('🎯 대체 방법으로 요소 발견, 스크롤 시도');
+          targetElement.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+          });
+          
+          // 하이라이트 효과
+          targetElement.style.transition = 'background-color 0.3s ease';
+          targetElement.style.backgroundColor = '#fff3cd';
+          setTimeout(() => {
+            targetElement.style.backgroundColor = '';
+            setTimeout(() => {
+              targetElement.style.transition = '';
+            }, 300);
+          }, 1000);
+          
+          return true;
+        } else {
+          console.error(`❌ 메시지 요소를 찾을 수 없습니다: ${messageId}`);
+          return false;
+        }
+      }
+    }
+    
+    // 전역 스코프에 함수 할당 (즉시)
+    window.scrollToMessage = scrollToMessage;
+
     /* ===== 프로필 편집 모달 시스템 ===== */
     class ProfileEditModal {
       constructor() {
@@ -1595,28 +1644,72 @@
       }
 
       toggleImageUpload() {
-        const isVisible = this.imageUploadArea.style.display !== 'none';
+        console.log('🔄 이미지 업로드 토글 실행');
         
-        if (isVisible) {
-          this.hideImageUpload();
-        } else {
-          this.showImageUpload();
+        if (!this.imageUploadArea) {
+          console.error('❌ imageUploadArea 요소를 찾을 수 없습니다');
+          return;
+        }
+        
+        try {
+          const isVisible = this.imageUploadArea.style.display !== 'none' && this.imageUploadArea.style.display !== '';
+          
+          console.log(`📋 현재 이미지 업로드 영역 상태: ${isVisible ? '표시됨' : '숨겨짐'}`);
+          
+          if (isVisible) {
+            this.hideImageUpload();
+          } else {
+            this.showImageUpload();
+          }
+        } catch (error) {
+          console.error('❌ 이미지 업로드 토글 중 오류 발생:', error);
         }
       }
 
       showImageUpload() {
-        this.imageUploadArea.style.display = 'block';
+        console.log('👆 이미지 업로드 영역 표시');
         
-        // Uppy Dashboard 크기 조정
-        if (this.uppy) {
-          setTimeout(() => {
-            this.uppy.getPlugin('Dashboard').requestCloseModal();
-          }, 100);
+        if (!this.imageUploadArea) {
+          console.error('❌ imageUploadArea가 null입니다');
+          return;
+        }
+        
+        try {
+          this.imageUploadArea.style.display = 'block';
+          console.log('✅ 이미지 업로드 영역 표시 완료');
+          
+          // Uppy Dashboard 크기 조정
+          if (this.uppy) {
+            setTimeout(() => {
+              try {
+                const dashboard = this.uppy.getPlugin('Dashboard');
+                if (dashboard && dashboard.requestCloseModal) {
+                  dashboard.requestCloseModal();
+                }
+              } catch (uppyError) {
+                console.warn('⚠️ Uppy Dashboard 조정 실패:', uppyError);
+              }
+            }, 100);
+          }
+        } catch (error) {
+          console.error('❌ 이미지 업로드 영역 표시 실패:', error);
         }
       }
 
       hideImageUpload() {
-        this.imageUploadArea.style.display = 'none';
+        console.log('👇 이미지 업로드 영역 숨김');
+        
+        if (!this.imageUploadArea) {
+          console.error('❌ imageUploadArea가 null입니다');
+          return;
+        }
+        
+        try {
+          this.imageUploadArea.style.display = 'none';
+          console.log('✅ 이미지 업로드 영역 숨김 완료');
+        } catch (error) {
+          console.error('❌ 이미지 업로드 영역 숨김 실패:', error);
+        }
       }
 
       previewImage(file) {
@@ -3264,45 +3357,82 @@
       
       // 특정 메시지로 스크롤하고 하이라이트
       scrollToMessage(messageId, highlight = true) {
-        const targetElement = document.querySelector(`[data-mid="${messageId}"]`);
-        if (!targetElement) {
-          console.warn(`메시지를 찾을 수 없습니다: ${messageId}`);
+        console.log(`🎯 메시지로 스크롤 시도: ${messageId}`);
+        
+        if (!messageId) {
+          console.warn('⚠️ messageId가 제공되지 않았습니다');
           return false;
         }
         
+        const targetElement = document.querySelector(`[data-mid="${messageId}"]`);
+        if (!targetElement) {
+          console.warn(`⚠️ 메시지를 찾을 수 없습니다: ${messageId}`);
+          // 다른 선택자들도 시도해보기
+          const altTargets = [
+            document.getElementById(messageId),
+            document.querySelector(`#msg-${messageId}`),
+            document.querySelector(`[id*="${messageId}"]`)
+          ].filter(Boolean);
+          
+          if (altTargets.length > 0) {
+            console.log(`✅ 대체 선택자로 요소 발견: ${altTargets[0].tagName}`);
+            return this.scrollToElement(altTargets[0], highlight);
+          }
+          
+          return false;
+        }
+        
+        return this.scrollToElement(targetElement, highlight);
+      },
+      
+      scrollToElement(targetElement, highlight = true) {
+        console.log('📍 요소로 스크롤 실행');
+        
         const container = this.getScrollContainer();
-        if (!container) return false;
-        
-        // 메시지 요소의 위치 계산
-        const containerRect = container.getBoundingClientRect();
-        const targetRect = targetElement.getBoundingClientRect();
-        
-        // 스크롤할 위치 계산 (메시지를 중앙에 배치)
-        const scrollTop = container.scrollTop + targetRect.top - containerRect.top - (containerRect.height / 2) + (targetRect.height / 2);
-        
-        // 부드럽게 스크롤
-        if ('scrollTo' in container) {
-          container.scrollTo({
-            top: Math.max(0, scrollTop),
-            behavior: 'smooth'
-          });
-        } else {
-          container.scrollTop = Math.max(0, scrollTop);
+        if (!container) {
+          console.error('❌ 스크롤 컨테이너를 찾을 수 없습니다');
+          return false;
         }
         
-        // 하이라이트 효과
-        if (highlight) {
-          targetElement.style.transition = 'background-color 0.3s ease';
-          targetElement.style.backgroundColor = '#fff3cd';
-          setTimeout(() => {
-            targetElement.style.backgroundColor = '';
+        try {
+          // 메시지 요소의 위치 계산
+          const containerRect = container.getBoundingClientRect();
+          const targetRect = targetElement.getBoundingClientRect();
+          
+          // 스크롤할 위치 계산 (메시지를 중앙에 배치)
+          const scrollTop = container.scrollTop + targetRect.top - containerRect.top - (containerRect.height / 2) + (targetRect.height / 2);
+          
+          console.log(`📏 스크롤 계산: scrollTop=${scrollTop}, container.scrollTop=${container.scrollTop}`);
+          
+          // 부드럽게 스크롤
+          if ('scrollTo' in container) {
+            container.scrollTo({
+              top: Math.max(0, scrollTop),
+              behavior: 'smooth'
+            });
+          } else {
+            container.scrollTop = Math.max(0, scrollTop);
+          }
+          
+          // 하이라이트 효과
+          if (highlight) {
+            console.log('✨ 메시지 하이라이트 효과 적용');
+            targetElement.style.transition = 'background-color 0.3s ease';
+            targetElement.style.backgroundColor = '#fff3cd';
             setTimeout(() => {
-              targetElement.style.transition = '';
-            }, 300);
-          }, 1000);
+              targetElement.style.backgroundColor = '';
+              setTimeout(() => {
+                targetElement.style.transition = '';
+              }, 300);
+            }, 1000);
+          }
+          
+          console.log('✅ 메시지로 스크롤 완료');
+          return true;
+        } catch (error) {
+          console.error('❌ 스크롤 중 오류 발생:', error);
+          return false;
         }
-        
-        return true;
       }
     };
 
@@ -4724,15 +4854,6 @@
       console.log('🔔 알림 설정 UI 초기화 완료');
     }
 
-    // 🔗 전역 스크롤 네비게이션 함수
-    window.scrollToMessage = function(messageId) {
-      if (ScrollManager && ScrollManager.scrollToMessage) {
-        return ScrollManager.scrollToMessage(messageId);
-      } else {
-        console.warn('ScrollManager가 아직 초기화되지 않았습니다.');
-        return false;
-      }
-    };
 
     // ===== Initialize Modern Profile System =====
     // Initialize work status on page load
