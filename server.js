@@ -1044,6 +1044,120 @@ app.get('/api/messages/single/:messageId', async (req, res) => {
   }
 });
 
+// 👑 관리자 권한 검증 함수
+function isAdminUser(userId) {
+  // 관리자 계정: 나우창 (생일 0809)의 고유 userId 패턴
+  // 실제 구현에서는 더 안전한 방식 사용 권장
+  const ADMIN_PATTERN = /^uid-[a-f0-9]+$/; // 기본 패턴 체크
+  
+  if (!userId || !ADMIN_PATTERN.test(userId)) {
+    return false;
+  }
+  
+  // 추가 검증: 데이터베이스에서 사용자 확인
+  return true; // 일단 패턴만 체크, 실제로는 DB 확인 필요
+}
+
+// 👑 관리자 메시지 삭제 API
+app.delete('/api/messages/:messageId', async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { adminUserId, reason } = req.body;
+    
+    // 입력 검증
+    if (!messageId || typeof messageId !== 'string') {
+      return res.status(400).json({ 
+        success: false,
+        error: '유효하지 않은 메시지 ID입니다.' 
+      });
+    }
+    
+    if (!adminUserId || typeof adminUserId !== 'string') {
+      return res.status(400).json({ 
+        success: false,
+        error: '관리자 ID가 필요합니다.' 
+      });
+    }
+    
+    // 🔒 관리자 권한 검증
+    let adminUser;
+    if (USE_MEMORY_DB) {
+      adminUser = await MemoryDB.findUser({ id: adminUserId });
+    } else {
+      adminUser = await User.findOne({ id: adminUserId });
+    }
+    
+    if (!adminUser || adminUser.nickname !== '나우창' || adminUser.birth4 !== '0809') {
+      console.warn(`⚠️ 권한 없는 삭제 시도: ${adminUserId} → ${messageId}`);
+      return res.status(403).json({ 
+        success: false,
+        error: '관리자 권한이 없습니다.' 
+      });
+    }
+    
+    // 메시지 존재 확인
+    let message;
+    if (USE_MEMORY_DB) {
+      message = memoryMessages.get(messageId);
+      if (!message) {
+        return res.status(404).json({ 
+          success: false,
+          error: '메시지를 찾을 수 없습니다.' 
+        });
+      }
+    } else {
+      message = await Message.findOne({ mid: messageId });
+      if (!message) {
+        return res.status(404).json({ 
+          success: false,
+          error: '메시지를 찾을 수 없습니다.' 
+        });
+      }
+    }
+    
+    // 삭제 실행
+    if (USE_MEMORY_DB) {
+      memoryMessages.delete(messageId);
+    } else {
+      await Message.deleteOne({ mid: messageId });
+    }
+    
+    // 삭제 로그 기록
+    const deleteLog = {
+      timestamp: new Date().toISOString(),
+      messageId: messageId,
+      adminUserId: adminUserId,
+      adminNickname: adminUser.nickname,
+      originalSender: message.userId,
+      room: message.room,
+      reason: reason || 'admin_delete',
+      messageContent: message.text || 'image'
+    };
+    
+    console.log('👑 [관리자 삭제]', deleteLog);
+    
+    // Socket.IO로 실시간 삭제 알림
+    io.to(message.room).emit('messageDeleted', {
+      mid: messageId,
+      adminId: adminUserId,
+      room: message.room
+    });
+    
+    res.json({ 
+      success: true,
+      message: '메시지가 삭제되었습니다.',
+      deletedId: messageId
+    });
+    
+  } catch (error) {
+    console.error('👑 관리자 메시지 삭제 오류:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message 
+    });
+  }
+});
+
 // 이미지 업로드 API (base64 저장 방식)
 app.post('/api/upload', async (req, res) => {
   try {
@@ -2015,7 +2129,8 @@ app.use((req, res, next) => {
     console.error('📋 사용 가능한 API:', [
       'POST /api/profile-upload',
       'POST /api/upload', 
-      'GET /api/messages/single/:messageId'
+      'GET /api/messages/single/:messageId',
+      'DELETE /api/messages/:messageId (관리자 전용)'
     ]);
     return res.status(404).json({ 
       success: false, 
@@ -2035,6 +2150,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('  - POST /api/profile-upload (프로필 이미지 업로드)');
   console.log('  - POST /api/upload (메시지 이미지 업로드)');
   console.log('  - GET /api/messages/single/:messageId (단일 메시지 조회)');
+  console.log('  - DELETE /api/messages/:messageId (👑 관리자 메시지 삭제)');
   
   // 😴 Keep-Alive 시스템 초기화 (Sleep 방지)
   const shouldUseKeepAlive = isProduction || process.env.NODE_ENV === 'staging';

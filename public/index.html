@@ -393,6 +393,18 @@
     .reply-btn:hover{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
     .msg-row:hover .reply-btn{ opacity:1; }
     
+    /* 👑 관리자 삭제 버튼 스타일 */
+    .admin-delete-btn{
+      width:24px; height:24px; border-radius:50%; 
+      background:#fff; border:1px solid #ef4444; 
+      display:flex; align-items:center; justify-content:center;
+      cursor:pointer; opacity:0; transition:all .2s;
+      color:#ef4444; font-size:12px; flex-shrink:0;
+      margin-left:4px;
+    }
+    .admin-delete-btn:hover{ background:#ef4444; color:#fff; transform:scale(1.1); }
+    .msg-row:hover .admin-delete-btn{ opacity:1; }
+    
     /* 답글 대상 표시 (카카오톡 스타일) */
     .reply-target{
       font-size:12px; color:var(--muted); margin-bottom:4px; 
@@ -3193,6 +3205,7 @@
       currentRoom: '주중',
       userId: null,
       me: null,
+      isAdmin: false,  // 관리자 권한 플래그
       flags: {
         sending: false,
         uploading: false,
@@ -4909,6 +4922,79 @@
         });
       }
     }
+    
+    // 👑 관리자 삭제 버튼 이벤트 핸들러
+    function bindAdminDeleteHandlers(mid){
+      if (!AppState.isAdmin) return;
+      
+      const deleteBtn = document.querySelector(`[data-mid="${mid}"].admin-delete-btn`);
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const targetMid = deleteBtn.getAttribute('data-mid');
+          
+          // 삭제 확인 다이얼로그
+          const messageRow = document.querySelector(`[data-message-id="${targetMid}"]`);
+          const senderName = messageRow?.getAttribute('data-sender-name') || '알 수 없는 사용자';
+          
+          if (confirm(`${senderName}의 메시지를 삭제하시겠습니까?\n\n⚠️ 이 작업은 되돌릴 수 없습니다.`)) {
+            await deleteMessage(targetMid);
+          }
+        });
+      }
+    }
+    
+    // 👑 관리자 메시지 삭제 함수
+    async function deleteMessage(mid) {
+      if (!AppState.isAdmin) {
+        console.error('[관리자] 권한이 없습니다');
+        alert('관리자 권한이 필요합니다.');
+        return;
+      }
+      
+      try {
+        console.log(`[관리자] 메시지 삭제 요청: ${mid}`);
+        
+        // 서버에 삭제 요청
+        const result = await apiCall('DELETE', `/api/messages/${mid}`, {
+          adminUserId: AppState.userId,
+          reason: 'admin_delete'
+        });
+        
+        if (result.success) {
+          console.log(`[관리자] 메시지 삭제 성공: ${mid}`);
+          
+          // UI에서 메시지 제거
+          const messageRow = document.querySelector(`[data-message-id="${mid}"]`);
+          if (messageRow) {
+            messageRow.style.opacity = '0.3';
+            messageRow.style.transform = 'translateX(-20px)';
+            
+            setTimeout(() => {
+              messageRow.remove();
+              
+              // 캐시에서도 제거
+              AppState.cache.renderedMids[AppState.currentRoom].delete(mid);
+              
+              console.log(`[관리자] UI에서 메시지 제거 완료: ${mid}`);
+            }, 300);
+          }
+          
+          // 다른 사용자들에게 삭제 알림 (Socket.IO 이벤트)
+          if (socket && socket.emit) {
+            socket.emit('messageDeleted', { mid, adminId: AppState.userId });
+          }
+          
+        } else {
+          throw new Error(result.error || '메시지 삭제 실패');
+        }
+        
+      } catch (error) {
+        console.error('[관리자] 메시지 삭제 오류:', error);
+        alert(`메시지 삭제 실패: ${error.message}`);
+      }
+    }
+    
     async function reactToggle(mid, emoji){
       try {
         const result = await apiCall('POST', '/api/reactions', { mid, userId: AppState.userId, emoji });
@@ -5115,6 +5201,10 @@
       // 🔗 답글 버튼 HTML
       const replyBtnHtml = `<button class="reply-btn" data-mid="${m.mid}" data-nick="${m.nickname || 'User'}" title="답글" aria-label="답글">↳</button>`;
       
+      // 👑 관리자 전용 삭제 버튼 HTML
+      const adminDeleteBtnHtml = AppState.isAdmin ? 
+        `<button class="admin-delete-btn" data-mid="${m.mid}" title="메시지 삭제 (관리자)" aria-label="메시지 삭제">🗑️</button>` : '';
+      
       const reactsHtml = renderReactsHtml(m);
       
       // 메시지 컨테이너 구조 개선
@@ -5123,11 +5213,20 @@
         : (m.text || '').replace(/\n/g,'<br/>')}</div>
            <div class="meta">${(m.nickname||'')} · ${DateUtils.formatTimeLabel(m.ts)}</div>${reactsHtml}`;
       
-      row.innerHTML = `${avatarHtml}<div class="message-container"><div class="bubble">${messageContent}</div>${replyBtnHtml}</div>`;
+      row.innerHTML = `${avatarHtml}<div class="message-container"><div class="bubble">${messageContent}</div>${replyBtnHtml}${adminDeleteBtnHtml}</div>`;
+      
+      // 메시지 ID를 data attribute로 추가 (삭제 기능에 필요)
+      row.setAttribute('data-message-id', m.mid);
+      row.setAttribute('data-sender-name', m.nickname || 'User');
       messagesEl.appendChild(row);
 
       bindReactionHandlers(m.mid);
       bindReplyHandlers(m.mid);
+      
+      // 👑 관리자 삭제 버튼 바인딩
+      if (AppState.isAdmin) {
+        bindAdminDeleteHandlers(m.mid);
+      }
 
       row.querySelectorAll('.p-open').forEach(btn=>{
         btn.addEventListener('click', ()=>{
@@ -5479,9 +5578,19 @@
       console.log('[UI] bindUI 함수 시작 - 안전한 이벤트 바인딩 적용');
       
       try {
-        // 안전한 이벤트 바인딩 - Fail Fast 원칙 적용
-        if (!DOM.safeAssign('#sendBtn', 'onclick', sendText)) {
-          console.error('[UI] sendBtn 바인딩 실패');
+        // 안전한 이벤트 바인딩 - 모바일 터치 호환성 개선
+        const sendBtnElement = DOM.el('#sendBtn');
+        if (sendBtnElement) {
+          // 모바일과 데스크톱 모두 호환되는 이벤트 리스너 사용
+          sendBtnElement.addEventListener('click', sendText);
+          // 터치 이벤트도 추가로 바인딩 (iOS Safari 호환성)
+          sendBtnElement.addEventListener('touchend', (e) => {
+            e.preventDefault(); // 중복 클릭 방지
+            sendText();
+          });
+          console.log('[UI] sendBtn 터치/클릭 이벤트 바인딩 완료');
+        } else {
+          console.error('[UI] sendBtn 요소를 찾을 수 없습니다');
         }
         
         const textElement = DOM.el('#text');
@@ -5582,13 +5691,20 @@
         const imageInput = DOM.el('#image');
         
         if (photoBtn && imageInput) {
-          photoBtn.onclick = () => { 
+          // 모바일 터치 호환성을 위한 이벤트 리스너 사용
+          const handlePhotoClick = () => {
             if (AppState.userId) {
               imageInput.click(); 
             } else {
               console.warn('[업로드] 로그인이 필요합니다');
             }
           };
+          
+          photoBtn.addEventListener('click', handlePhotoClick);
+          photoBtn.addEventListener('touchend', (e) => {
+            e.preventDefault(); // 중복 클릭 방지
+            handlePhotoClick();
+          });
           
           imageInput.addEventListener('change', async () => {
             try {
@@ -5794,6 +5910,14 @@
         console.log('[로그인] 로그인 성공:', { userId: u.id, name: u.nickname });
         AppState.userId = u.id;
         
+        // 🔒 관리자 권한 체크 (나우창 + 0809)
+        const isAdmin = (u.nickname === '나우창' && nameInput.value === '나우창' && birthInput.value === '0809');
+        AppState.isAdmin = isAdmin;
+        
+        if (isAdmin) {
+          console.log('👑 관리자 로그인 - 특별 권한 활성화');
+        }
+        
         // UI 상태 변경
         authDiv.classList.add('hidden'); 
         document.body.classList.remove('auth-open');
@@ -5868,6 +5992,34 @@
       // 반응 업데이트도 동일한 검증 적용
       if (message.room === AppState.currentRoom && AppState.userId && !AppState.flags.switching) {
         updateReactsView(message);
+      }
+    });
+
+    // 👑 관리자 메시지 삭제 이벤트
+    socket.on('messageDeleted', (data) => {
+      const { mid, adminId, room } = data;
+      
+      if (room === AppState.currentRoom) {
+        // UI에서 메시지 제거
+        const messageRow = document.querySelector(`[data-message-id="${mid}"]`);
+        if (messageRow) {
+          messageRow.style.opacity = '0.3';
+          messageRow.style.transform = 'translateX(-20px)';
+          
+          setTimeout(() => {
+            messageRow.remove();
+            
+            // 캐시에서도 제거
+            AppState.cache.renderedMids[AppState.currentRoom].delete(mid);
+            
+            console.log(`[Socket] 관리자에 의해 메시지가 삭제됨: ${mid}`);
+          }, 300);
+        }
+        
+        // 관리자가 아닌 사용자에게 알림 표시
+        if (AppState.userId !== adminId) {
+          console.log('🗑️ 관리자에 의해 메시지가 삭제되었습니다.');
+        }
       }
     });
 
