@@ -5961,7 +5961,9 @@
           let touchStartCoords = null;
           
           // iOS Safari 전용 터치 이벤트 시퀀스
-          if (isIOSSafari || (isMobileDevice && isTouch)) {
+          // iOS Safari는 터치 지원 감지와 관계없이 터치 이벤트 바인딩 (실제 디바이스 호환성)
+          if (isIOSSafari) {
+            console.log('[iOS터치] iOS Safari 감지됨 - 터치 이벤트 강제 바인딩');
             
             // 터치 시작 감지
             sendBtnElement.addEventListener('touchstart', (e) => {
@@ -6055,21 +6057,46 @@
             
             console.log('[iOS터치] iOS Safari 전용 터치 이벤트 바인딩 완료');
             
+          } else if (isMobileDevice && isTouch) {
+            // 다른 모바일 디바이스 (Android 등)의 터치 이벤트
+            console.log('[터치] 모바일 디바이스 터치 이벤트 바인딩');
+            
+            sendBtnElement.addEventListener('touchstart', (e) => {
+              touchStarted = true;
+              touchProcessing = false;
+              console.log('[터치] touchstart 감지 - 안드로이드/기타 모바일');
+              sendBtnElement.style.opacity = '0.7';
+            }, { passive: true });
+            
+            sendBtnElement.addEventListener('touchend', (e) => {
+              sendBtnElement.style.opacity = '';
+              if (!touchStarted) return;
+              
+              e.preventDefault();
+              e.stopPropagation();
+              
+              touchStarted = false;
+              touchProcessing = true;
+              lastTouchTime = Date.now();
+              
+              console.log('[터치] touchend 처리 - 메시지 전송');
+              setTimeout(() => {
+                sendText();
+                setTimeout(() => { touchProcessing = false; }, 300);
+              }, 0);
+            }, { passive: false });
+            
           } else {
-            // 데스크톱/비iOS 환경의 클릭 이벤트
+            // 데스크톱 환경의 클릭 이벤트
+            console.log('[클릭] 데스크톱 클릭 이벤트 바인딩');
             sendBtnElement.addEventListener('click', (e) => {
               console.log('[클릭] 데스크톱 클릭 이벤트 처리');
               sendText();
             });
           }
           
-          // 데스크톱용 클릭 이벤트 (iOS가 아닌 경우에만)
-          if (!isIOSSafari && !isMobileDevice) {
-            sendBtnElement.addEventListener('click', (e) => {
-              console.log('[클릭] 데스크톱 클릭 이벤트 처리');
-              sendText();
-            });
-          } else if (isIOSSafari) {
+          // iOS Safari 전용 클릭 이벤트 폴백 (Ghost Click 방지)
+          if (isIOSSafari) {
             // iOS Safari에서 클릭 이벤트 고스트 클릭 방지
             sendBtnElement.addEventListener('click', (e) => {
               if (touchProcessing || (Date.now() - lastTouchTime < 500)) {
