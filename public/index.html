@@ -213,6 +213,9 @@
       min-height:44px; height:44px; padding:12px 16px; border-radius:999px; border:1px solid transparent;
       font-weight:700; cursor:pointer; user-select:none; transition:transform .02s, box-shadow .15s;
       touch-action:manipulation; /* 더블탭 확대 방지 */
+      -webkit-touch-callout: none; /* iOS Safari 길게 누르기 메뉴 방지 */
+      -webkit-user-select: none; /* iOS Safari 텍스트 선택 방지 */
+      -webkit-tap-highlight-color: transparent; /* iOS Safari 터치 하이라이트 방지 */
     }
     .btn:active{ transform:translateY(1px); }
     .btn[disabled]{ opacity:.6; cursor:not-allowed; }
@@ -851,6 +854,56 @@
       .messages{ padding-bottom:120px; }
       .tabs .tab{ max-width:60vw; }
     }
+    
+    /* iOS Safari 전용 터치 최적화 */
+    @supports (-webkit-touch-callout: none) {
+      .btn {
+        /* iOS Safari 실제 디바이스 터치 최적화 */
+        -webkit-touch-callout: none !important;
+        -webkit-user-select: none !important;
+        -webkit-tap-highlight-color: transparent !important;
+        touch-action: manipulation !important;
+        /* iOS Safari 터치 대기시간 최소화 */
+        -webkit-user-drag: none !important;
+        -webkit-transform: translate3d(0,0,0); /* 하드웨어 가속 강제 */
+      }
+      
+      /* iOS Safari 전송 버튼 특별 최적화 */
+      #sendBtn {
+        /* iOS Safari 터치 응답성 극대화 */
+        -webkit-touch-callout: none !important;
+        -webkit-user-select: none !important;
+        -webkit-tap-highlight-color: rgba(0,0,0,0) !important;
+        touch-action: manipulation !important;
+        -webkit-user-drag: none !important;
+        /* 터치 영역 확장 (최소 44x44px 보장) */
+        min-width: 44px !important;
+        min-height: 44px !important;
+        /* 하드웨어 가속으로 터치 지연 최소화 */
+        -webkit-transform: translate3d(0,0,0);
+        will-change: transform;
+        /* iOS Safari 터치 시작 지연 최소화 */
+        -webkit-transform-style: preserve-3d;
+      }
+      
+      /* iOS Safari에서 터치 반응성 향상 */
+      .composer {
+        -webkit-touch-callout: none !important;
+        touch-action: pan-x pan-y !important;
+      }
+    }
+    
+    /* iPhone/iPad 전용 미디어쿼리 */
+    @media screen and (-webkit-min-device-pixel-ratio: 2) and (orientation: portrait) {
+      #sendBtn {
+        /* 높은 DPI iOS 디바이스 터치 최적화 */
+        -webkit-transform: translateZ(0);
+        transform: translateZ(0);
+        backface-visibility: hidden;
+        perspective: 1000;
+      }
+    }
+    
     /* 기존 480px 이하 추가 스타일 */
     @media (max-width: 480px){
       .composer .input{ 
@@ -5877,54 +5930,163 @@
       console.log('[UI] bindUI 함수 시작 - 안전한 이벤트 바인딩 적용');
       
       try {
-        // iOS Safari 터치 호환성 강화 - Ghost Click 방지
+        // iOS Safari 실제 디바이스 터치 호환성 강화
         const sendBtnElement = DOM.el('#sendBtn');
         console.log('[UI] #sendBtn 요소 검색 결과:', sendBtnElement ? '발견됨' : '없음');
+        
+        // User-Agent 및 디바이스 감지
+        const isIOSSafari = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        
+        console.log('[디바이스] iOS Safari 감지:', isIOSSafari);
+        console.log('[디바이스] 모바일 디바이스:', isMobileDevice);
+        console.log('[디바이스] 터치 지원:', isTouch);
+        
         if (sendBtnElement) {
+          // CSS 터치 최적화 (iOS Safari 전용)
+          sendBtnElement.style.touchAction = 'manipulation';
+          sendBtnElement.style.userSelect = 'none';
+          sendBtnElement.style.webkitUserSelect = 'none';
+          sendBtnElement.style.webkitTouchCallout = 'none';
+          sendBtnElement.style.webkitTapHighlightColor = 'transparent';
+          
+          // iOS Safari 최소 터치 타겟 크기 보장 (44x44px)
+          const btnRect = sendBtnElement.getBoundingClientRect();
+          console.log('[터치타겟] 버튼 크기:', btnRect.width, 'x', btnRect.height);
+          
           let touchStarted = false;
           let touchProcessing = false;
           let lastTouchTime = 0;
+          let touchStartCoords = null;
           
-          // iOS Safari 터치 시퀀스 처리
-          sendBtnElement.addEventListener('touchstart', (e) => {
-            touchStarted = true;
-            touchProcessing = false;
-            console.log('[터치] touchstart 감지 - iOS Safari 모드');
-          }, { passive: true });
-          
-          sendBtnElement.addEventListener('touchend', (e) => {
-            if (!touchStarted) return;
+          // iOS Safari 전용 터치 이벤트 시퀀스
+          if (isIOSSafari || (isMobileDevice && isTouch)) {
             
-            e.preventDefault(); // Ghost Click 방지
-            e.stopPropagation(); // 이벤트 버블링 차단
-            
-            touchStarted = false;
-            touchProcessing = true;
-            lastTouchTime = Date.now();
-            
-            console.log('[터치] touchend 처리 - 메시지 전송 시작');
-            sendText();
-            
-            // 터치 처리 상태 초기화
-            setTimeout(() => {
+            // 터치 시작 감지
+            sendBtnElement.addEventListener('touchstart', (e) => {
+              touchStarted = true;
               touchProcessing = false;
-            }, 300);
-          }, { passive: false });
-          
-          // 마우스/클릭 이벤트 처리 (데스크톱 호환성)
-          sendBtnElement.addEventListener('click', (e) => {
-            // 최근 터치 이벤트가 있었다면 클릭 무시 (Ghost Click 방지)
-            if (touchProcessing || (Date.now() - lastTouchTime < 300)) {
-              console.log('[터치] Ghost Click 방지됨');
-              e.preventDefault();
-              return;
-            }
+              
+              // 터치 시작 좌표 저장 (스와이프 필터링용)
+              if (e.touches && e.touches[0]) {
+                touchStartCoords = {
+                  x: e.touches[0].clientX,
+                  y: e.touches[0].clientY
+                };
+              }
+              
+              console.log('[iOS터치] touchstart 감지 - 좌표:', touchStartCoords);
+              
+              // iOS Safari 시각적 피드백
+              sendBtnElement.style.opacity = '0.7';
+              
+            }, { passive: true });
             
-            console.log('[클릭] 데스크톱 클릭 이벤트 처리');
-            sendText();
-          });
+            // 터치 이동 감지 (스와이프 취소)
+            sendBtnElement.addEventListener('touchmove', (e) => {
+              if (!touchStarted || !touchStartCoords) return;
+              
+              if (e.touches && e.touches[0]) {
+                const currentCoords = {
+                  x: e.touches[0].clientX,
+                  y: e.touches[0].clientY
+                };
+                
+                const distance = Math.sqrt(
+                  Math.pow(currentCoords.x - touchStartCoords.x, 2) + 
+                  Math.pow(currentCoords.y - touchStartCoords.y, 2)
+                );
+                
+                // 10px 이상 이동시 터치 취소
+                if (distance > 10) {
+                  console.log('[iOS터치] 터치 이동 감지 - 취소:', distance + 'px');
+                  touchStarted = false;
+                  sendBtnElement.style.opacity = '';
+                }
+              }
+            }, { passive: true });
+            
+            // 터치 완료 처리
+            sendBtnElement.addEventListener('touchend', (e) => {
+              // 시각적 피드백 복원
+              sendBtnElement.style.opacity = '';
+              
+              if (!touchStarted) {
+                console.log('[iOS터치] touchstart 없이 touchend 감지 - 무시');
+                return;
+              }
+              
+              // iOS Safari 고스트 클릭 방지
+              e.preventDefault();
+              e.stopPropagation();
+              e.stopImmediatePropagation();
+              
+              touchStarted = false;
+              touchProcessing = true;
+              lastTouchTime = Date.now();
+              
+              console.log('[iOS터치] touchend 처리 - 메시지 전송 시작');
+              
+              // iOS Safari 안전한 비동기 실행
+              setTimeout(() => {
+                try {
+                  sendText();
+                  console.log('[iOS터치] 메시지 전송 완료');
+                } catch (error) {
+                  console.error('[iOS터치] 전송 오류:', error);
+                }
+              }, 0);
+              
+              // 터치 처리 상태 초기화
+              setTimeout(() => {
+                touchProcessing = false;
+              }, 500); // iOS Safari용 더 긴 대기시간
+              
+            }, { passive: false });
+            
+            // 터치 취소 처리
+            sendBtnElement.addEventListener('touchcancel', (e) => {
+              console.log('[iOS터치] touchcancel 감지');
+              touchStarted = false;
+              touchProcessing = false;
+              sendBtnElement.style.opacity = '';
+            }, { passive: true });
+            
+            console.log('[iOS터치] iOS Safari 전용 터치 이벤트 바인딩 완료');
+            
+          } else {
+            // 데스크톱/비iOS 환경의 클릭 이벤트
+            sendBtnElement.addEventListener('click', (e) => {
+              console.log('[클릭] 데스크톱 클릭 이벤트 처리');
+              sendText();
+            });
+          }
           
-          console.log('[UI] iOS Safari 호환 터치/클릭 이벤트 바인딩 완료');
+          // 데스크톱용 클릭 이벤트 (iOS가 아닌 경우에만)
+          if (!isIOSSafari && !isMobileDevice) {
+            sendBtnElement.addEventListener('click', (e) => {
+              console.log('[클릭] 데스크톱 클릭 이벤트 처리');
+              sendText();
+            });
+          } else if (isIOSSafari) {
+            // iOS Safari에서 클릭 이벤트 고스트 클릭 방지
+            sendBtnElement.addEventListener('click', (e) => {
+              if (touchProcessing || (Date.now() - lastTouchTime < 500)) {
+                console.log('[iOS터치] Ghost Click 방지됨 - 터치 이벤트 우선');
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                return false;
+              }
+              
+              // 터치 이벤트가 없었다면 클릭으로 처리 (접근성)
+              console.log('[iOS클릭] 터치 없는 클릭 이벤트 처리 (접근성)');
+              sendText();
+            });
+          }
+          
+          console.log('[UI] iOS Safari 실제 디바이스 호환 이벤트 바인딩 완료');
         } else {
           console.error('[UI] sendBtn 요소를 찾을 수 없습니다');
         }
