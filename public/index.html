@@ -868,22 +868,25 @@
         -webkit-transform: translate3d(0,0,0); /* 하드웨어 가속 강제 */
       }
       
-      /* iOS Safari 전송 버튼 특별 최적화 */
+      /* iOS Safari 전송 버튼 특별 최적화 (Context7 모범 사례 적용) */
       #sendBtn {
         /* iOS Safari 터치 응답성 극대화 */
         -webkit-touch-callout: none !important;
         -webkit-user-select: none !important;
         -webkit-tap-highlight-color: rgba(0,0,0,0) !important;
-        touch-action: manipulation !important;
+        touch-action: none !important; /* Context7 권장: 완전한 터치 제어 */
         -webkit-user-drag: none !important;
-        /* 터치 영역 확장 (최소 44x44px 보장) */
-        min-width: 44px !important;
-        min-height: 44px !important;
+        /* 터치 영역 확장 (Material Design 3 권장 크기) */
+        min-width: 48px !important;
+        min-height: 48px !important;
         /* 하드웨어 가속으로 터치 지연 최소화 */
         -webkit-transform: translate3d(0,0,0);
         will-change: transform;
         /* iOS Safari 터치 시작 지연 최소화 */
         -webkit-transform-style: preserve-3d;
+        /* Context7 권장: 추가 터치 최적화 */
+        -webkit-backface-visibility: hidden;
+        backface-visibility: hidden;
       }
       
       /* iOS Safari에서 터치 반응성 향상 */
@@ -5965,8 +5968,9 @@
           if (isIOSSafari) {
             console.log('[iOS터치] iOS Safari 감지됨 - 터치 이벤트 강제 바인딩');
             
-            // 터치 시작 감지
+            // 터치 시작 감지 (Context7 모범 사례 적용)
             sendBtnElement.addEventListener('touchstart', (e) => {
+              // Context7 권장: 이벤트 처리 순서 최적화
               touchStarted = true;
               touchProcessing = false;
               
@@ -5980,10 +5984,14 @@
               
               console.log('[iOS터치] touchstart 감지 - 좌표:', touchStartCoords);
               
-              // iOS Safari 시각적 피드백
+              // iOS Safari 시각적 피드백 (즉시 적용)
               sendBtnElement.style.opacity = '0.7';
+              sendBtnElement.style.transform = 'scale(0.98)'; // 추가 피드백
               
-            }, { passive: true });
+            }, { 
+              passive: true,  // touchstart는 passive로 유지 (성능 최적화)
+              capture: false  // Context7 권장 옵션
+            });
             
             // 터치 이동 감지 (스와이프 취소)
             sendBtnElement.addEventListener('touchmove', (e) => {
@@ -6000,60 +6008,79 @@
                   Math.pow(currentCoords.y - touchStartCoords.y, 2)
                 );
                 
-                // 10px 이상 이동시 터치 취소
-                if (distance > 10) {
+                // Context7 권장: 더 관대한 터치 허용 범위 (8px)
+                if (distance > 8) {
                   console.log('[iOS터치] 터치 이동 감지 - 취소:', distance + 'px');
                   touchStarted = false;
+                  // 시각적 피드백 즉시 복원
                   sendBtnElement.style.opacity = '';
+                  sendBtnElement.style.transform = '';
                 }
               }
-            }, { passive: true });
+            }, { 
+              passive: true,   // touchmove는 성능을 위해 passive 유지
+              capture: false   // Context7 권장
+            });
             
-            // 터치 완료 처리
+            // 터치 완료 처리 (Context7 모범 사례 적용)
             sendBtnElement.addEventListener('touchend', (e) => {
-              // 시각적 피드백 복원
+              // Context7 권장: preventDefault를 가장 먼저 호출
+              e.preventDefault();
+              e.stopPropagation();
+              e.stopImmediatePropagation();
+              
+              // 시각적 피드백 즉시 복원
               sendBtnElement.style.opacity = '';
+              sendBtnElement.style.transform = ''; // scale 복원
               
               if (!touchStarted) {
                 console.log('[iOS터치] touchstart 없이 touchend 감지 - 무시');
                 return;
               }
               
-              // iOS Safari 고스트 클릭 방지
-              e.preventDefault();
-              e.stopPropagation();
-              e.stopImmediatePropagation();
-              
+              // 상태 업데이트
               touchStarted = false;
               touchProcessing = true;
               lastTouchTime = Date.now();
               
               console.log('[iOS터치] touchend 처리 - 메시지 전송 시작');
               
-              // iOS Safari 안전한 비동기 실행
-              setTimeout(() => {
+              // Context7 권장: requestAnimationFrame 사용으로 더 부드러운 처리
+              requestAnimationFrame(() => {
                 try {
                   sendText();
                   console.log('[iOS터치] 메시지 전송 완료');
                 } catch (error) {
                   console.error('[iOS터치] 전송 오류:', error);
+                } finally {
+                  // 터치 처리 상태 초기화 (Context7 권장 타이밍)
+                  setTimeout(() => {
+                    touchProcessing = false;
+                  }, 300); // 최적화된 대기시간
                 }
-              }, 0);
+              });
               
-              // 터치 처리 상태 초기화
-              setTimeout(() => {
-                touchProcessing = false;
-              }, 500); // iOS Safari용 더 긴 대기시간
-              
-            }, { passive: false });
+            }, { 
+              passive: false,  // preventDefault 사용을 위해 필수
+              capture: false   // Context7 권장 옵션
+            });
             
-            // 터치 취소 처리
+            // 터치 취소 처리 (Context7 모범 사례 적용)
             sendBtnElement.addEventListener('touchcancel', (e) => {
-              console.log('[iOS터치] touchcancel 감지');
+              console.log('[iOS터치] touchcancel 감지 - 상태 완전 초기화');
+              
+              // Context7 권장: 모든 상태 즉시 초기화
               touchStarted = false;
               touchProcessing = false;
+              
+              // 시각적 피드백 즉시 복원
               sendBtnElement.style.opacity = '';
-            }, { passive: true });
+              sendBtnElement.style.transform = '';
+              
+            }, { 
+              passive: true,   // touchcancel은 passive 유지
+              capture: false   // Context7 권장 옵션
+            });
             
             console.log('[iOS터치] iOS Safari 전용 터치 이벤트 바인딩 완료');
             
