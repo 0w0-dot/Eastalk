@@ -5879,6 +5879,7 @@
       try {
         // iOS Safari 터치 호환성 강화 - Ghost Click 방지
         const sendBtnElement = DOM.el('#sendBtn');
+        console.log('[UI] #sendBtn 요소 검색 결과:', sendBtnElement ? '발견됨' : '없음');
         if (sendBtnElement) {
           let touchStarted = false;
           let touchProcessing = false;
@@ -6450,7 +6451,7 @@
 
     // ===== Boot =====
     (function boot(){
-      bindUI(); enableUI(false);
+      enableUI(false);
       // 로그인 자동완성 방지 + 항상 빈칸
       const ln=el('#loginName'), lb=el('#loginBirth');
       ln.name='n_'+Math.random().toString(36).slice(2); lb.name='b_'+Math.random().toString(36).slice(2);
@@ -6578,9 +6579,13 @@
     // ===== Initialize Modern Profile System =====
     // Initialize work status on page load
     document.addEventListener('DOMContentLoaded', function() {
+      // ✅ DOM 완전 로드 후 UI 이벤트 바인딩 (터치 이벤트 포함)
+      bindUI();
+      
       initializeWorkStatus();
       setupEventDelegation(); // 🎧 이벤트 위임 시스템 초기화
       console.log('🔧 Modern Profile System initialized');
+      console.log('✅ DOM 로드 완료 - 모든 이벤트 바인딩 완료');
     });
 
     // 🎧 이벤트 위임 시스템 (메모리 최적화)
