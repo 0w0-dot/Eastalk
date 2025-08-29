@@ -13,6 +13,16 @@ const multer = require('multer');
 
 require('dotenv').config();
 
+// 최적화 모듈 로드
+const { logger, createLogger } = require('./utils/logger');
+const { monitor } = require('./utils/performance');
+const config = require('./config/optimization');
+
+// 모듈별 로거 생성
+const socketLogger = createLogger('Socket');
+const dbLogger = createLogger('Database');
+const apiLogger = createLogger('API');
+
 const app = express();
 const server = http.createServer(app);
 const io = socketIO(server, {
@@ -20,14 +30,14 @@ const io = socketIO(server, {
     origin: "*",
     methods: ["GET", "POST"]
   },
-  // 성능 최적화 설정
-  pingInterval: 15000,  // 기본 25초 → 15초로 단축
-  pingTimeout: 10000,   // 기본 20초 → 10초로 단축
-  // Connection State Recovery 활성화
-  connectionStateRecovery: {
-    maxDisconnectionDuration: 2 * 60 * 1000, // 2분간 상태 보존
-    skipMiddlewares: true
-  }
+  // 최적화 설정 적용
+  pingInterval: config.socketIO.pingInterval,
+  pingTimeout: config.socketIO.pingTimeout,
+  maxHttpBufferSize: config.socketIO.maxHttpBufferSize,
+  connectionStateRecovery: config.socketIO.connectionStateRecovery,
+  // 압축 설정
+  compression: true,
+  perMessageDeflate: config.socketIO.perMessageDeflate
 });
 
 // 🎯 Render 최적화 설정
@@ -61,21 +71,10 @@ webpush.setVapidDetails(
   VAPID_PRIVATE_KEY
 );
 
-console.log(`🔔 VAPID Subject 설정: ${VAPID_EMAIL}`);
+logger.info(`VAPID Subject 설정: ${VAPID_EMAIL}`);
 
-// 🧹 메모리 최적화: 가비지 컬렉션 강화
-if (global.gc) {
-  console.log('🧹 가비지 컬렉션 시스템 활성화');
-  // 20초마다 강제 가비지 컬렉션 실행
-  setInterval(() => {
-    const used = process.memoryUsage();
-    global.gc();
-    const afterGC = process.memoryUsage();
-    console.log(`🧹 메모리 정리: ${Math.round((used.heapUsed - afterGC.heapUsed) / 1024 / 1024)}MB 회수`);
-  }, 20000);
-} else {
-  console.log('⚠️ 가비지 컬렉션 비활성화 (--expose-gc 플래그 필요)');
-}
+// 성능 모니터링 시작
+logger.info('성능 모니터링 시스템 초기화');
 
 // 캐시 관리: 임시 데이터 자동 정리
 const cache = new Map();
@@ -83,9 +82,9 @@ setInterval(() => {
   const size = cache.size;
   cache.clear();
   if (size > 0) {
-    console.log(`🧹 캐시 정리: ${size}개 항목 제거`);
+    logger.debug(`캐시 정리: ${size}개 항목 제거`);
   }
-}, 300000); // 5분마다
+}, config.cache.cleanupInterval);
 
 // Render 프록시 신뢰 설정 (Rate Limiter 오류 해결)
 app.set('trust proxy', 1);
@@ -99,47 +98,115 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Render용 Rate limiting (더 관대하게)
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15분
-  max: isProduction ? 500 : 1000 // 프로덕션에서는 더 제한적
+// 최적화된 Rate Limiting
+const generalLimiter = rateLimit({
+  ...config.rateLimit.api,
+  keyGenerator: (req) => {
+    monitor.incrementRequests();
+    return req.ip;
+  }
 });
-app.use(limiter);
+
+const messageLimiter = rateLimit({
+  ...config.rateLimit.message,
+  keyGenerator: (req) => req.ip
+});
+
+const uploadLimiter = rateLimit({
+  ...config.rateLimit.upload,
+  keyGenerator: (req) => req.ip
+});
+
+app.use(generalLimiter);
 
 // 정적 파일 제공
 app.use(express.static('public'));
 
-// 🔍 API 요청 로깅 미들웨어 (메모리 효율 개선)
+// 헬스체크 엔드포인트
+app.get('/health', async (req, res) => {
+  try {
+    const health = await monitor.healthCheck();
+    const suggestions = monitor.getOptimizationSuggestions();
+    
+    res.status(health.status === 'healthy' ? 200 : 503).json({
+      ...health,
+      suggestions: suggestions
+    });
+  } catch (error) {
+    logger.error('헬스체크 실패', error);
+    res.status(503).json({
+      status: 'error',
+      message: 'Health check failed'
+    });
+  }
+});
+
+// 성능 메트릭 엔드포인트 (개발 환경 전용)
+if (process.env.NODE_ENV === 'development') {
+  app.get('/metrics', (req, res) => {
+    const metrics = monitor.getMetrics();
+    res.json(metrics);
+  });
+}
+
+// API 요청 로깅 및 성능 측정 미들웨어
 app.use('/api', (req, res, next) => {
   const startTime = Date.now();
   
-  // 프로덕션에서는 상세 로깅 축소
-  if (!isProduction) {
-    console.log(`🔍 API 요청: ${req.method} ${req.path}`);
-    if (req.body && Object.keys(req.body).length > 0) {
-      console.log('📦 요청 본문:', JSON.stringify(req.body).slice(0, 200) + '...');
-    }
+  apiLogger.debug(`${req.method} ${req.path}`, {
+    ip: req.ip,
+    userAgent: req.get('User-Agent')?.slice(0, 50)
+  });
+  
+  if (req.body && Object.keys(req.body).length > 0) {
+    apiLogger.debug('요청 본문', {
+      body: JSON.stringify(req.body).slice(0, 200)
+    });
   }
   
   // 응답 완료 시 성능 측정
   res.on('finish', () => {
     const duration = Date.now() - startTime;
-    if (duration > 1000) { // 1초 이상 걸린 요청만 로깅
-      console.log(`⚠️ 느린 API: ${req.method} ${req.path} (${duration}ms)`);
+    
+    if (res.statusCode >= 400) {
+      monitor.incrementErrors();
+      apiLogger.warn(`${req.method} ${req.path} - ${res.statusCode}`, {
+        duration: `${duration}ms`,
+        status: res.statusCode
+      });
+    } else if (duration > config.monitoring.slowQueryThreshold) {
+      apiLogger.warn(`느린 응답`, {
+        method: req.method,
+        path: req.path,
+        duration: `${duration}ms`
+      });
+    } else {
+      apiLogger.debug(`${req.method} ${req.path} - ${res.statusCode}`, {
+        duration: `${duration}ms`
+      });
     }
   });
   
   next();
 });
 
-// 🚨 글로벌 에러 핸들러 (강화)
+// 글로벌 에러 핸들러
 app.use((err, req, res, next) => {
-  console.error('🚨 서버 오류:', err.stack);
+  monitor.incrementErrors();
+  
+  logger.error('서버 오류 발생', {
+    error: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+    ip: req.ip
+  });
   
   // 메모리 누수 방지를 위한 에러 객체 정리
   const errorResponse = {
     error: isProduction ? 'Internal Server Error' : err.message,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    ...(isProduction ? {} : { stack: err.stack })
   };
   
   res.status(500).json(errorResponse);
@@ -2140,34 +2207,46 @@ app.use((req, res, next) => {
   next();
 });
 
-// 🚀 Render 최적화된 서버 시작
+// 서버 시작
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Eastalk 서버가 포트 ${PORT}에서 실행 중입니다.`);
-  console.log(`🌍 환경: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 MongoDB: ${MONGODB_URI ? '연결됨' : '로컬 사용'}`);
-  console.log(`⏰ 시작 시간: ${new Date().toISOString()}`);
-  console.log('📋 등록된 API 라우트:');
-  console.log('  - POST /api/profile-upload (프로필 이미지 업로드)');
-  console.log('  - POST /api/upload (메시지 이미지 업로드)');
-  console.log('  - GET /api/messages/single/:messageId (단일 메시지 조회)');
-  console.log('  - DELETE /api/messages/:messageId (👑 관리자 메시지 삭제)');
+  logger.info(`Eastalk 서버 시작`, {
+    port: PORT,
+    environment: process.env.NODE_ENV || 'development',
+    mongodb: MONGODB_URI ? '연결됨' : '로컬 사용',
+    startTime: new Date().toISOString(),
+    pid: process.pid,
+    nodeVersion: process.version
+  });
   
-  // 😴 Keep-Alive 시스템 초기화 (Sleep 방지)
+  logger.info('등록된 API 라우트', {
+    routes: [
+      'GET /health (헬스체크)',
+      'GET /metrics (성능 메트릭)',
+      'POST /api/profile-upload (프로필 이미지)',
+      'POST /api/upload (메시지 이미지)',
+      'GET /api/messages/single/:messageId (단일 메시지)',
+      'DELETE /api/messages/:messageId (관리자 삭제)'
+    ]
+  });
+  
+  // Keep-Alive 시스템 초기화
   const shouldUseKeepAlive = isProduction || process.env.NODE_ENV === 'staging';
   if (shouldUseKeepAlive) {
     initSmartKeepAliveSystem();
   } else {
-    console.log('🧪 개발 모드: Keep-Alive 시스템 비활성화');
+    logger.info('개발 모드: Keep-Alive 시스템 비활성화');
   }
 });
 
-// 🛡️ Graceful shutdown for Render
+// Graceful shutdown
 process.on('SIGTERM', () => {
-  console.log('🛑 SIGTERM 받음, 서버 종료 중...');
+  logger.info('SIGTERM 신호 수신, 서버 종료 시작');
+  
   server.close(() => {
-    console.log('✅ 서버 종료 완료');
+    logger.info('HTTP 서버 종료 완료');
+    
     mongoose.connection.close(false, () => {
-      console.log('✅ MongoDB 연결 종료');
+      logger.info('MongoDB 연결 종료 완료');
       process.exit(0);
     });
   });
