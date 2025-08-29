@@ -5258,15 +5258,21 @@
           options.body = JSON.stringify(body);
         }
         
+        console.log(`[apiCall] ${method} ${url}`, body);
         const response = await fetch(url, options);
+        console.log(`[apiCall] Response status: ${response.status}`);
         
         if (!response.ok) {
+          console.error(`[apiCall] Response not OK: ${response.status} ${response.statusText}`);
           const error = await response.json();
           throw new Error(error.error || 'API 요청 실패');
         }
         
-        return await response.json();
+        const data = await response.json();
+        console.log('[apiCall] Response data:', data);
+        return data;
       } catch (error) {
+        console.error('[apiCall] Error:', error);
         throw error;
       }
     }
@@ -6011,7 +6017,9 @@
           requestBody.replyTo = AppState.reply.targetMid;
         }
         
+        console.log('[sendText] 메시지 전송 시작:', requestBody);
         const result = await apiCall('POST', '/api/messages', requestBody);
+        console.log('[sendText] 메시지 전송 성공:', result);
         
         AppState.flags.sending = false;
         Utils.setButtonLoading(DOM.el('#sendBtn'), false);
@@ -6030,9 +6038,14 @@
         }
         beep();
       } catch (error) {
+        console.error('[sendText] 메시지 전송 실패:', error);
         AppState.flags.sending = false;
         Utils.setButtonLoading(DOM.el('#sendBtn'), false);
-        alert('전송 실패: '+error.message);
+        
+        // 네트워크 오류나 서버 오류인 경우에만 알림 표시
+        if (error.message && error.message !== 'API 요청 실패') {
+          alert('메시지 전송 실패. 다시 시도해주세요.');
+        }
       }
     }
 
@@ -6110,7 +6123,10 @@
           if (textInput) textInput.blur();
         } catch (error) {
           console.error('[전송 오류]:', error);
-          alert('메시지 전송 실패. 다시 시도해주세요.');
+          // 실제 네트워크 오류인 경우에만 alert 표시
+          if (error.message && !error.message.includes('전송 실패')) {
+            // sendText 함수에서 이미 alert를 표시했으므로 중복 표시하지 않음
+          }
         } finally {
           isSending = false;
         }
