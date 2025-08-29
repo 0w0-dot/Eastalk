@@ -2053,7 +2053,7 @@
     // 상수 정의
     const CONFIG = {
       ROOMS: ['주중', '주말', '전체', '방문예정'],
-      EMOJIS: ['👍', '😂', '😮', '😢', '😡', '❤️'],
+      EMOJIS: ['\uD83D\uDC4D', '\uD83D\uDE02', '\uD83D\uDE2E', '\uD83D\uDE22', '\uD83D\uDE21', '\u2764\uFE0F'],
       MAX_MESSAGE_LENGTH: 2000,
       MAX_FILE_SIZE: 10 * 1024 * 1024, // 10MB
       SCROLL_THRESHOLD: 80
@@ -2062,27 +2062,27 @@
     /* ===== Work Status System ===== */
     const WorkStatus = {
       ticketing: { 
-        icon: '🎫', 
+        icon: '\uD83C\uDFAB', 
         text: '발권', 
         color: '#3B82F6'
       },
       checking: { 
-        icon: '✅', 
+        icon: '\u2705', 
         text: '검표', 
         color: '#10B981'
       },
       patrol: { 
-        icon: '🚶', 
+        icon: '\uD83D\uDEB6', 
         text: '순찰', 
         color: '#F59E0B'
       },
       artshop: { 
-        icon: '🎨', 
+        icon: '\uD83C\uDFA8', 
         text: '아트샵', 
         color: '#8B5CF6'
       },
       offline: { 
-        icon: '⚪', 
+        icon: '\u26AA', 
         text: '오프라인', 
         color: '#6B7280'
       }
@@ -2097,7 +2097,7 @@
     console.log('🌍 전역 scrollToMessage 함수 정의 중...');
     
     function scrollToMessage(messageId) {
-      console.log(`🌍 전역 scrollToMessage 호출: ${messageId}`);
+      console.log('🌍 전역 scrollToMessage 호출: ' + messageId);
       
       if (!messageId) {
         console.warn('⚠️ messageId가 제공되지 않았습니다');
@@ -2112,7 +2112,7 @@
         console.warn('ScrollManager가 아직 초기화되지 않았습니다. 대체 방법 시도...');
         
         // ScrollManager가 없을 경우 직접 스크롤 시도
-        const targetElement = document.querySelector(`[data-mid="${messageId}"]`);
+        const targetElement = document.querySelector('[data-mid="' + messageId + '"]');
         if (targetElement) {
           console.log('🎯 대체 방법으로 요소 발견, 스크롤 시도');
           targetElement.scrollIntoView({ 
@@ -2132,7 +2132,7 @@
           
           return true;
         } else {
-          console.error(`❌ 메시지 요소를 찾을 수 없습니다: ${messageId}`);
+          console.error('❌ 메시지 요소를 찾을 수 없습니다: ' + messageId);
           return false;
         }
       }
@@ -2161,7 +2161,7 @@
         outputFormat = 'image/jpeg'
       } = options;
       
-      console.log('[압축] 이미지 최적화 시작:', file.name, `원본: ${(file.size/1024).toFixed(2)}KB`);
+      console.log('[압축] 이미지 최적화 시작:', file.name, '원본: ' + (file.size/1024).toFixed(2) + 'KB');
       
       return new Promise((resolve, reject) => {
         const img = new Image();
@@ -2190,7 +2190,7 @@
                 newWidth = newHeight * aspectRatio;
               }
               
-              console.log('[압축] 크기 조정:', `${originalWidth}x${originalHeight} → ${Math.round(newWidth)}x${Math.round(newHeight)}`);
+              console.log('[압축] 크기 조정:', originalWidth + 'x' + originalHeight + ' → ' + Math.round(newWidth) + 'x' + Math.round(newHeight));
             }
             
             // Canvas 크기 설정
@@ -2210,9 +2210,9 @@
             const compressionRatio = ((1 - compressedSize / file.size) * 100).toFixed(1);
             
             console.log('[압축] 압축 완료:', 
-              `압축후: ${(compressedSize/1024).toFixed(2)}KB`,
-              `압축률: ${compressionRatio}%`,
-              `품질: ${quality}`
+              '압축후: ' + (compressedSize/1024).toFixed(2) + 'KB',
+              '압축률: ' + compressionRatio + '%',
+              '품질: ' + quality
             );
             
             resolve({
@@ -2387,7 +2387,7 @@
         // 이미지 정보 업데이트
         const imageInfo = document.getElementById('imageInfo');
         if (imageInfo && modalImage.naturalWidth && modalImage.naturalHeight) {
-          imageInfo.textContent = `${modalImage.naturalWidth} × ${modalImage.naturalHeight}`;
+          imageInfo.textContent = modalImage.naturalWidth + ' × ' + modalImage.naturalHeight;
         }
         
         // 페이드인 애니메이션
@@ -2496,7 +2496,7 @@
           }
 
           if (missingElements.length > 0) {
-            throw new Error(`필수 요소들을 찾을 수 없습니다: ${missingElements.join(', ')}`);
+            throw new Error('필수 요소들을 찾을 수 없습니다: ' + missingElements.join(', '));
           }
 
           console.log('✅ ProfileEditModal 요소 바인딩 완료');
@@ -4938,7 +4938,7 @@
           return false;
         }
         
-        const targetElement = document.querySelector(`[data-mid="${messageId}"]`);
+        const targetElement = document.querySelector('[data-mid="' + messageId + '"]');
         if (!targetElement) {
           console.warn(`⚠️ 메시지를 찾을 수 없습니다: ${messageId}`);
           // 다른 선택자들도 시도해보기
@@ -6201,195 +6201,6 @@
       try {
         // 새로운 전송 버튼 설정 함수 호출 (Pointer Events API 사용)
         setupSendButton();
-        
-        // 기존 터치 이벤트 코드는 제거됨 (Pointer Events API로 대체)
-          
-          let touchStarted = false;
-          let touchProcessing = false;
-          let lastTouchTime = 0;
-          let touchStartCoords = null;
-          
-          // iOS Safari 전용 터치 이벤트 시퀀스
-          // iOS Safari는 터치 지원 감지와 관계없이 터치 이벤트 바인딩 (실제 디바이스 호환성)
-          if (isIOSSafari) {
-            console.log('[iOS터치] iOS Safari 감지됨 - 터치 이벤트 강제 바인딩');
-            
-            // 터치 시작 감지 (Context7 모범 사례 적용)
-            sendBtnElement.addEventListener('touchstart', (e) => {
-              // Context7 권장: 이벤트 처리 순서 최적화
-              touchStarted = true;
-              touchProcessing = false;
-              
-              // 터치 시작 좌표 저장 (스와이프 필터링용)
-              if (e.touches && e.touches[0]) {
-                touchStartCoords = {
-                  x: e.touches[0].clientX,
-                  y: e.touches[0].clientY
-                };
-              }
-              
-              console.log('[iOS터치] touchstart 감지 - 좌표:', touchStartCoords);
-              
-              // iOS Safari 시각적 피드백 (즉시 적용)
-              sendBtnElement.style.opacity = '0.7';
-              sendBtnElement.style.transform = 'scale(0.98)'; // 추가 피드백
-              
-            }, { 
-              passive: true,  // touchstart는 passive로 유지 (성능 최적화)
-              capture: false  // Context7 권장 옵션
-            });
-            
-            // 터치 이동 감지 (스와이프 취소)
-            sendBtnElement.addEventListener('touchmove', (e) => {
-              if (!touchStarted || !touchStartCoords) return;
-              
-              if (e.touches && e.touches[0]) {
-                const currentCoords = {
-                  x: e.touches[0].clientX,
-                  y: e.touches[0].clientY
-                };
-                
-                const distance = Math.sqrt(
-                  Math.pow(currentCoords.x - touchStartCoords.x, 2) + 
-                  Math.pow(currentCoords.y - touchStartCoords.y, 2)
-                );
-                
-                // Context7 권장: 더 관대한 터치 허용 범위 (8px)
-                if (distance > 8) {
-                  console.log('[iOS터치] 터치 이동 감지 - 취소:', distance + 'px');
-                  touchStarted = false;
-                  // 시각적 피드백 즉시 복원
-                  sendBtnElement.style.opacity = '';
-                  sendBtnElement.style.transform = '';
-                }
-              }
-            }, { 
-              passive: true,   // touchmove는 성능을 위해 passive 유지
-              capture: false   // Context7 권장
-            });
-            
-            // 터치 완료 처리 (Context7 모범 사례 적용)
-            sendBtnElement.addEventListener('touchend', (e) => {
-              // Context7 권장: preventDefault를 가장 먼저 호출
-              e.preventDefault();
-              e.stopPropagation();
-              e.stopImmediatePropagation();
-              
-              // 시각적 피드백 즉시 복원
-              sendBtnElement.style.opacity = '';
-              sendBtnElement.style.transform = ''; // scale 복원
-              
-              if (!touchStarted) {
-                console.log('[iOS터치] touchstart 없이 touchend 감지 - 무시');
-                return;
-              }
-              
-              // 상태 업데이트
-              touchStarted = false;
-              touchProcessing = true;
-              lastTouchTime = Date.now();
-              
-              console.log('[iOS터치] touchend 처리 - 메시지 전송 시작');
-              
-              // Context7 권장: requestAnimationFrame 사용으로 더 부드러운 처리
-              requestAnimationFrame(() => {
-                try {
-                  sendText();
-                  console.log('[iOS터치] 메시지 전송 완료');
-                } catch (error) {
-                  console.error('[iOS터치] 전송 오류:', error);
-                } finally {
-                  // 터치 처리 상태 초기화 (Context7 권장 타이밍)
-                  setTimeout(() => {
-                    touchProcessing = false;
-                  }, 300); // 최적화된 대기시간
-                }
-              });
-              
-            }, { 
-              passive: false,  // preventDefault 사용을 위해 필수
-              capture: false   // Context7 권장 옵션
-            });
-            
-            // 터치 취소 처리 (Context7 모범 사례 적용)
-            sendBtnElement.addEventListener('touchcancel', (e) => {
-              console.log('[iOS터치] touchcancel 감지 - 상태 완전 초기화');
-              
-              // Context7 권장: 모든 상태 즉시 초기화
-              touchStarted = false;
-              touchProcessing = false;
-              
-              // 시각적 피드백 즉시 복원
-              sendBtnElement.style.opacity = '';
-              sendBtnElement.style.transform = '';
-              
-            }, { 
-              passive: true,   // touchcancel은 passive 유지
-              capture: false   // Context7 권장 옵션
-            });
-            
-            console.log('[iOS터치] iOS Safari 전용 터치 이벤트 바인딩 완료');
-            
-          } else if (isMobileDevice && isTouch) {
-            // 다른 모바일 디바이스 (Android 등)의 터치 이벤트
-            console.log('[터치] 모바일 디바이스 터치 이벤트 바인딩');
-            
-            sendBtnElement.addEventListener('touchstart', (e) => {
-              touchStarted = true;
-              touchProcessing = false;
-              console.log('[터치] touchstart 감지 - 안드로이드/기타 모바일');
-              sendBtnElement.style.opacity = '0.7';
-            }, { passive: true });
-            
-            sendBtnElement.addEventListener('touchend', (e) => {
-              sendBtnElement.style.opacity = '';
-              if (!touchStarted) return;
-              
-              e.preventDefault();
-              e.stopPropagation();
-              
-              touchStarted = false;
-              touchProcessing = true;
-              lastTouchTime = Date.now();
-              
-              console.log('[터치] touchend 처리 - 메시지 전송');
-              setTimeout(() => {
-                sendText();
-                setTimeout(() => { touchProcessing = false; }, 300);
-              }, 0);
-            }, { passive: false });
-            
-          } else {
-            // 데스크톱 환경의 클릭 이벤트
-            console.log('[클릭] 데스크톱 클릭 이벤트 바인딩');
-            sendBtnElement.addEventListener('click', (e) => {
-              console.log('[클릭] 데스크톱 클릭 이벤트 처리');
-              sendText();
-            });
-          }
-          
-          // iOS Safari 전용 클릭 이벤트 폴백 (Ghost Click 방지)
-          if (isIOSSafari) {
-            // iOS Safari에서 클릭 이벤트 고스트 클릭 방지
-            sendBtnElement.addEventListener('click', (e) => {
-              if (touchProcessing || (Date.now() - lastTouchTime < 500)) {
-                console.log('[iOS터치] Ghost Click 방지됨 - 터치 이벤트 우선');
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-                return false;
-              }
-              
-              // 터치 이벤트가 없었다면 클릭으로 처리 (접근성)
-              console.log('[iOS클릭] 터치 없는 클릭 이벤트 처리 (접근성)');
-              sendText();
-            });
-          }
-          
-          console.log('[UI] iOS Safari 실제 디바이스 호환 이벤트 바인딩 완료');
-        } else {
-          console.error('[UI] sendBtn 요소를 찾을 수 없습니다');
-        }
         
         const textElement = DOM.el('#text');
         if (textElement) {
