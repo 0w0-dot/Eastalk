@@ -1962,14 +1962,15 @@
         </div>
       </div>
       
-      <div class="composer">
+      <!-- Form으로 감싸서 submit fallback 제공 -->
+      <form id="messageForm" class="composer" autocomplete="off">
         <input id="text" class="input" placeholder="메시지 입력 (Enter 전송, Shift+Enter 줄바꿈)" disabled />
-        <button id="photoBtn" class="btn btn-ghost btn-icon" title="사진">📷</button>
-        <button id="sendBtn" class="btn btn-primary">
+        <button id="photoBtn" type="button" class="btn btn-ghost btn-icon" title="사진">📷</button>
+        <button id="sendBtn" type="submit" class="btn btn-primary">
           <span class="label-txt">전송</span>
           <span class="spinner" style="display:none"></span>
         </button>
-      </div>
+      </form>
 
       <form id="uploadForm" style="display:none">
         <input type="file" id="image" name="image" accept="image/*" />
@@ -3605,10 +3606,17 @@
       }
     };
 
-    // Socket.io 연결 (지능형 Keep-Alive 설정)
+    // Socket.io 연결 (지능형 Keep-Alive 설정 + 연결 안정성 개선)
     const socket = io({
-      pingInterval: 25000,  // 25초마다 ping (Socket.IO v4 기본값)
-      pingTimeout: 20000    // 20초 응답 타임아웃
+      pingInterval: 25000,      // 25초마다 ping (Socket.IO v4 기본값)
+      pingTimeout: 20000,       // 20초 응답 타임아웃
+      tryAllTransports: true,   // 연결 실패 시 모든 전송 방식 시도 (폴백 메커니즘)
+      forceNew: false,         // 기존 연결 재사용
+      reconnection: true,       // 자동 재연결 활성화
+      reconnectionAttempts: 5,  // 최대 재연결 시도 횟수
+      reconnectionDelay: 1000,  // 재연결 간격 (1초)
+      reconnectionDelayMax: 5000, // 최대 재연결 간격 (5초)
+      timeout: 20000           // 연결 타임아웃
     });
 
     /* ===== 🔔 NotificationQueue 클래스 ===== */
@@ -4573,6 +4581,48 @@
       sanitizeInput: (input, maxLength = CONFIG.MAX_MESSAGE_LENGTH) => {
         if (typeof input !== 'string') return '';
         return input.trim().slice(0, maxLength);
+      },
+      
+      // XSS 방지를 위한 HTML 이스케이프 함수
+      escapeHTML: (str) => {
+        if (typeof str !== 'string') return '';
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+      },
+      
+      // 메시지 텍스트를 안전하게 HTML로 변환 (줄바꿈 처리 포함)
+      formatMessageText: (text) => {
+        if (!text) return '';
+        // HTML 이스케이프 후 줄바꿈만 <br>로 변환
+        return Utils.escapeHTML(text).replace(/\n/g, '<br>');
+      },
+      
+      // 프로덕션 환경 감지
+      isProduction: () => {
+        return window.location.hostname !== 'localhost' && 
+               window.location.hostname !== '127.0.0.1' &&
+               !window.location.hostname.includes('192.168.');
+      },
+      
+      // 조건부 로깅 시스템
+      log: {
+        info: (...args) => {
+          if (!Utils.isProduction()) {
+            console.log(...args);
+          }
+        },
+        warn: (...args) => {
+          console.warn(...args); // 경고는 프로덕션에서도 표시
+        },
+        error: (...args) => {
+          console.error(...args); // 오류는 프로덕션에서도 표시
+        },
+        debug: (...args) => {
+          if (!Utils.isProduction()) {
+            console.debug(...args);
+          }
+        }
       }
     };
 
@@ -5257,12 +5307,100 @@
     function updateReactsView(m){
       const node = document.getElementById('reacts-'+m.mid);
       if (!node) return;
+      
       const pickerOpen = !(node.querySelector('.picker')?.classList.contains('hidden'));
       const oldSig = node.dataset.sig || '';
       const newSig = Utils.createReactionSignature(m.reactions||{});
+      
+      // Skip if picker is open or no changes
       if (pickerOpen || oldSig === newSig) return;
-      node.outerHTML = renderReactsHtml(m);
-      bindReactionHandlers(m.mid);
+      
+      // Use efficient partial update instead of full re-render
+      updateReactsPartial(m, node);
+    }
+
+    // Efficient partial reaction update system
+    function updateReactsPartial(m, node) {
+      const chipsContainer = node.querySelector('.chips');
+      if (!chipsContainer) {
+        // Fallback to full render if structure is broken
+        node.outerHTML = renderReactsHtml(m);
+        bindReactionHandlers(m.mid);
+        return;
+      }
+
+      const newCounts = reactsToCounts(m.reactions || {});
+      const currentChips = [...chipsContainer.querySelectorAll('.chip')];
+      const newSig = Utils.createReactionSignature(m.reactions || {});
+      
+      // Create a map of current chips for efficient lookup
+      const currentChipsMap = new Map();
+      currentChips.forEach(chip => {
+        const emoji = chip.dataset.emoji;
+        currentChipsMap.set(emoji, chip);
+      });
+      
+      // Track which chips to keep (to avoid removing and re-adding unchanged ones)
+      const chipsToKeep = new Set();
+      
+      // Update or create chips for new reaction counts
+      newCounts.forEach((countData, index) => {
+        const { emoji, count, mine } = countData;
+        const existingChip = currentChipsMap.get(emoji);
+        
+        if (existingChip) {
+          // Update existing chip if count or mine status changed
+          const currentCount = parseInt(existingChip.textContent.split(' ')[1]) || 0;
+          const currentMine = existingChip.classList.contains('mine');
+          
+          if (currentCount !== count || currentMine !== mine) {
+            existingChip.textContent = `${emoji} ${count}`;
+            existingChip.classList.toggle('mine', mine);
+          }
+          
+          // Ensure correct position
+          const currentIndex = [...chipsContainer.children].indexOf(existingChip);
+          if (currentIndex !== index) {
+            // Move to correct position
+            if (index < chipsContainer.children.length) {
+              chipsContainer.insertBefore(existingChip, chipsContainer.children[index]);
+            } else {
+              chipsContainer.appendChild(existingChip);
+            }
+          }
+          
+          chipsToKeep.add(emoji);
+        } else {
+          // Create new chip
+          const newChip = document.createElement('span');
+          newChip.className = `chip ${mine ? 'mine' : ''}`;
+          newChip.dataset.mid = m.mid;
+          newChip.dataset.emoji = emoji;
+          newChip.textContent = `${emoji} ${count}`;
+          
+          // Insert at correct position
+          if (index < chipsContainer.children.length) {
+            chipsContainer.insertBefore(newChip, chipsContainer.children[index]);
+          } else {
+            chipsContainer.appendChild(newChip);
+          }
+          
+          chipsToKeep.add(emoji);
+        }
+      });
+      
+      // Remove chips that are no longer needed
+      currentChips.forEach(chip => {
+        const emoji = chip.dataset.emoji;
+        if (!chipsToKeep.has(emoji)) {
+          chip.remove();
+        }
+      });
+      
+      // Update signature
+      node.dataset.sig = newSig;
+      
+      // Note: Event delegation handles clicks, no need to rebind individual handlers
     }
     
     // 🔗 답글 버튼 이벤트 핸들러
@@ -5562,11 +5700,11 @@
       
       const reactsHtml = renderReactsHtml(m);
       
-      // 메시지 컨테이너 구조 개선
+      // 메시지 컨테이너 구조 개선 (XSS 방지 적용)
       const messageContent = `${replyTargetHtml}<div>${(m.kind === 'image' && m.mediaUrl) ? 
-        `<img id="img-${m.mid || m.ts}" class="lazy-image" data-src="${m.mediaUrl}" src="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='200'%20height='100'%3E%3Crect%20fill='%23f3f4f6'%20width='200'%20height='100'/%3E%3Ctext%20fill='%23a3a3a3'%20x='50%25'%20y='50%25'%20text-anchor='middle'%20dy='.3em'%20font-size='12'%3E이미지 로딩 중...%3C/text%3E%3C/svg%3E" alt="${m.fileName || 'image'}" style="max-width:100%; border-radius:12px;" />` 
-        : (m.text || '').replace(/\n/g,'<br/>')}</div>
-           <div class="meta">${(m.nickname||'')} · ${DateUtils.formatTimeLabel(m.ts)}</div>${reactsHtml}`;
+        `<img id="img-${m.mid || m.ts}" class="lazy-image" data-src="${Utils.escapeHTML(m.mediaUrl)}" src="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='200'%20height='100'%3E%3Crect%20fill='%23f3f4f6'%20width='200'%20height='100'/%3E%3Ctext%20fill='%23a3a3a3'%20x='50%25'%20y='50%25'%20text-anchor='middle'%20dy='.3em'%20font-size='12'%3E이미지 로딩 중...%3C/text%3E%3C/svg%3E" alt="${Utils.escapeHTML(m.fileName || 'image')}" style="max-width:100%; border-radius:12px;" />` 
+        : Utils.formatMessageText(m.text)}</div>
+           <div class="meta">${Utils.escapeHTML(m.nickname||'')} · ${DateUtils.formatTimeLabel(m.ts)}</div>${reactsHtml}`;
       
       row.innerHTML = `${avatarHtml}<div class="message-container"><div class="bubble">${messageContent}</div>${replyBtnHtml}${adminDeleteBtnHtml}</div>`;
       
@@ -5929,34 +6067,142 @@
       ConnectedUsersUI.setUsers([]);
     }
 
+    // Pointer Events API를 사용한 새로운 전송 버튼 핸들러
+    function setupSendButton() {
+      const sendBtnElement = DOM.el('#sendBtn');
+      const messageForm = DOM.el('#messageForm');
+      const textInput = DOM.el('#text');
+      
+      if (!sendBtnElement || !messageForm) {
+        console.error('[UI] 필수 요소를 찾을 수 없습니다');
+        return;
+      }
+      
+      // 중복 전송 방지를 위한 변수
+      let isSending = false;
+      let lastSendTime = 0;
+      const SEND_COOLDOWN_MS = 250;
+      const MOVE_TOLERANCE_PX = 20; // 터치 이동 허용 범위 (8px → 20px로 상향)
+      
+      // 전송 가능 여부 체크
+      function canSend() {
+        const now = Date.now();
+        if (isSending) return false;
+        if (now - lastSendTime < SEND_COOLDOWN_MS) return false;
+        return (textInput && textInput.value.trim().length > 0);
+      }
+      
+      // 전송 함수 래퍼 (중복 방지 로직 포함)
+      async function handleSend(e) {
+        if (e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        
+        if (!canSend()) return;
+        
+        isSending = true;
+        try {
+          await sendText();
+          lastSendTime = Date.now();
+          
+          // iOS 키보드 숨기기
+          if (textInput) textInput.blur();
+        } catch (error) {
+          console.error('[전송 오류]:', error);
+          alert('메시지 전송 실패. 다시 시도해주세요.');
+        } finally {
+          isSending = false;
+        }
+      }
+      
+      // 1. Form Submit 이벤트 (Enter 키와 버튼 클릭 모두 처리)
+      messageForm.addEventListener('submit', handleSend);
+      console.log('[UI] Form submit 이벤트 바인딩 완료');
+      
+      // 2. Pointer Events API를 사용한 터치/마우스 통합 처리
+      // CSS 최적화 (모든 브라우저)
+      sendBtnElement.style.touchAction = 'manipulation';
+      sendBtnElement.style.userSelect = 'none';
+      sendBtnElement.style.webkitUserSelect = 'none';
+      sendBtnElement.style.webkitTouchCallout = 'none';
+      sendBtnElement.style.webkitTapHighlightColor = 'transparent';
+      
+      // Pointer Events 변수
+      let pointerDownX = 0;
+      let pointerDownY = 0;
+      let isPointerDown = false;
+      
+      // 3. Pointer Events 핸들러
+      sendBtnElement.addEventListener('pointerdown', (e) => {
+        isPointerDown = true;
+        pointerDownX = e.clientX;
+        pointerDownY = e.clientY;
+        
+        // 시각적 피드백
+        sendBtnElement.style.opacity = '0.7';
+        sendBtnElement.style.transform = 'scale(0.98)';
+        
+        console.log('[Pointer] pointerdown 감지');
+      }, { passive: true });
+      
+      sendBtnElement.addEventListener('pointerup', (e) => {
+        // 시각적 피드백 복원
+        sendBtnElement.style.opacity = '';
+        sendBtnElement.style.transform = '';
+        
+        if (!isPointerDown) return;
+        isPointerDown = false;
+        
+        // 이동 거리 계산
+        const dx = Math.abs(e.clientX - pointerDownX);
+        const dy = Math.abs(e.clientY - pointerDownY);
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // 이동 거리가 임계값 이내면 탭으로 인식
+        if (distance <= MOVE_TOLERANCE_PX) {
+          console.log('[Pointer] 탭 감지 - 전송 시작');
+          handleSend(e);
+        } else {
+          console.log('[Pointer] 스와이프 감지 - 전송 취소:', distance + 'px');
+        }
+      });
+      
+      sendBtnElement.addEventListener('pointercancel', (e) => {
+        // 시각적 피드백 복원
+        sendBtnElement.style.opacity = '';
+        sendBtnElement.style.transform = '';
+        isPointerDown = false;
+        console.log('[Pointer] pointercancel - 취소됨');
+      }, { passive: true });
+      
+      // 4. 클릭 이벤트 폴백 (Pointer Events를 지원하지 않는 구형 브라우저용)
+      if (!window.PointerEvent) {
+        console.log('[UI] Pointer Events 미지원 - 클릭 이벤트 폴백 사용');
+        sendBtnElement.addEventListener('click', handleSend);
+      }
+      
+      // 5. 텍스트 입력 필드 Enter 키 처리 (Shift+Enter는 줄바꿈)
+      if (textInput) {
+        textInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSend(e);
+          }
+        });
+      }
+      
+      console.log('[UI] 전송 버튼 이벤트 바인딩 완료 (Pointer Events API)');
+    }
+    
     function bindUI(){
-      console.log('[UI] bindUI 함수 시작 - 안전한 이벤트 바인딩 적용');
+      console.log('[UI] bindUI 함수 시작');
       
       try {
-        // iOS Safari 실제 디바이스 터치 호환성 강화
-        const sendBtnElement = DOM.el('#sendBtn');
-        console.log('[UI] #sendBtn 요소 검색 결과:', sendBtnElement ? '발견됨' : '없음');
+        // 새로운 전송 버튼 설정 함수 호출 (Pointer Events API 사용)
+        setupSendButton();
         
-        // User-Agent 및 디바이스 감지
-        const isIOSSafari = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-        const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-        
-        console.log('[디바이스] iOS Safari 감지:', isIOSSafari);
-        console.log('[디바이스] 모바일 디바이스:', isMobileDevice);
-        console.log('[디바이스] 터치 지원:', isTouch);
-        
-        if (sendBtnElement) {
-          // CSS 터치 최적화 (iOS Safari 전용)
-          sendBtnElement.style.touchAction = 'manipulation';
-          sendBtnElement.style.userSelect = 'none';
-          sendBtnElement.style.webkitUserSelect = 'none';
-          sendBtnElement.style.webkitTouchCallout = 'none';
-          sendBtnElement.style.webkitTapHighlightColor = 'transparent';
-          
-          // iOS Safari 최소 터치 타겟 크기 보장 (44x44px)
-          const btnRect = sendBtnElement.getBoundingClientRect();
-          console.log('[터치타겟] 버튼 크기:', btnRect.width, 'x', btnRect.height);
+        // 기존 터치 이벤트 코드는 제거됨 (Pointer Events API로 대체)
           
           let touchStarted = false;
           let touchProcessing = false;
@@ -7086,6 +7332,39 @@
       if (target.id === 'toggle98' || closest('#toggle98')) {
         applyTheme98(!document.body.classList.contains('win98')); 
         beep();
+        return;
+      }
+      
+      // 😀 리액션 처리 (이벤트 위임)
+      if (closest('.chip') && target.dataset.mid && target.dataset.emoji) {
+        e.stopPropagation();
+        const mid = target.dataset.mid;
+        const emoji = target.dataset.emoji;
+        reactToggle(mid, emoji);
+        return;
+      }
+      
+      // 😀 리액션 피커 버튼들
+      if (closest('.pick') && target.dataset.mid && target.dataset.emoji) {
+        e.stopPropagation();
+        const mid = target.dataset.mid;
+        const emoji = target.dataset.emoji;
+        reactToggle(mid, emoji);
+        
+        // 피커 닫기
+        const picker = DOM.el('#picker-' + mid);
+        if (picker) picker.classList.add('hidden');
+        return;
+      }
+      
+      // 😀 리액션 추가 버튼 (+ 버튼)
+      if (closest('.add-react') && target.dataset.mid) {
+        e.stopPropagation();
+        const mid = target.dataset.mid;
+        const picker = DOM.el('#picker-' + mid);
+        if (picker) {
+          picker.classList.toggle('hidden');
+        }
         return;
       }
       
